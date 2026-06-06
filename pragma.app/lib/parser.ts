@@ -7,6 +7,7 @@ const MEETING_KEYWORDS = ["reunión", "reunion", "meeting", "standup", "sincro",
 const CLIENT_KEYWORDS = ["cliente", "acme", "externo", "llamada", "call"];
 const IDEA_KEYWORDS = ["idea", "pensar en", "explorar", "bóveda", "boveda"];
 const PERSONAL_KEYWORDS = ["personal", "cumpleaños", "cumple", "abuela", "abuelo", "mamá", "mama", "papá", "papa", "casa", "médico", "medico", "cita", "dental", "familia", "familiar", "boda", "fiesta", "vacaciones"];
+const LEARNING_KEYWORDS = ["estudio", "estudiar", "aprendizaje", "aprender", "curso", "leer", "libro", "capacitacion", "capacitación", "tutorial", "clase", "academia", "doc", "documentacion", "documentación", "investigar"];
 
 /**
  * Detects presence of flags for showing real-time chips
@@ -21,10 +22,16 @@ export function detectFlags(text: string): string[] {
   const hasMeeting = MEETING_KEYWORDS.some(k => lowercase.includes(k)) || CLIENT_KEYWORDS.some(k => lowercase.includes(k));
   // Check Idea keywords
   const hasIdea = IDEA_KEYWORDS.some(k => lowercase.includes(k));
+  // Check Learning keywords
+  const hasLearning = LEARNING_KEYWORDS.some(k => lowercase.includes(k));
+  // Check Personal keywords
+  const hasPersonal = PERSONAL_KEYWORDS.some(k => lowercase.includes(k));
 
   if (hasDev) flags.push("dev");
   if (hasMeeting) flags.push("meeting");
   if (hasIdea) flags.push("idea");
+  if (hasLearning) flags.push("learning");
+  if (hasPersonal) flags.push("personal");
 
   return flags;
 }
@@ -105,13 +112,16 @@ export function parseBrainDump(text: string, answers: Record<string, any> = {}):
       type = "idea";
       matched = true;
     } else if (BUG_KEYWORDS.some(k => lowercase.includes(k))) {
-      type = "bug";
+      type = "dev"; // Map bugs to development
       matched = true;
     } else if (CLIENT_KEYWORDS.some(k => lowercase.includes(k))) {
-      type = "client";
+      type = "meeting"; // Map client tasks to meetings
       matched = true;
     } else if (MEETING_KEYWORDS.some(k => lowercase.includes(k))) {
       type = "meeting";
+      matched = true;
+    } else if (LEARNING_KEYWORDS.some(k => lowercase.includes(k))) {
+      type = "learning";
       matched = true;
     } else if (PERSONAL_KEYWORDS.some(k => lowercase.includes(k))) {
       type = "personal";
@@ -136,7 +146,7 @@ export function parseBrainDump(text: string, answers: Record<string, any> = {}):
     if (type === "meeting" && !time && answers.meeting_time) {
       time = answers.meeting_time;
     }
-    if (type === "bug" && answers.bug_duration) {
+    if (type === "dev" && BUG_KEYWORDS.some(k => lowercase.includes(k)) && answers.bug_duration) {
       title = `${title} (${answers.bug_duration})`;
     }
 
@@ -167,6 +177,7 @@ export function parseBrainDump(text: string, answers: Record<string, any> = {}):
   // 4. bug
   // 5. idea
   // 6. personal
+  // 7. learning
   const typeOrder: Record<TimelineItem["type"], number> = {
     dev: 1,
     meeting: 2,
@@ -174,6 +185,7 @@ export function parseBrainDump(text: string, answers: Record<string, any> = {}):
     bug: 4,
     idea: 5,
     personal: 6,
+    learning: 7,
   };
 
   return items.sort((a, b) => {
@@ -205,6 +217,7 @@ export function calculateEffort(timeline: TimelineItem[]): { dev: number; meetin
     client: 2,
     idea: 1,
     personal: 1,
+    learning: 2,
   };
 
   let devWeight = 0;
@@ -217,7 +230,7 @@ export function calculateEffort(timeline: TimelineItem[]): { dev: number; meetin
       devWeight += w;
     } else if (item.type === "meeting" || item.type === "client" || item.type === "personal") {
       meetingWeight += w;
-    } else if (item.type === "idea") {
+    } else if (item.type === "idea" || item.type === "learning") {
       ideaWeight += w;
     }
   });
@@ -292,12 +305,16 @@ export function parseAgendarLine(line: string): { date: string; time: string; ti
       meeting: "meeting",
       desarrollo: "dev",
       dev: "dev",
-      bug: "bug",
-      fix: "bug",
-      error: "bug",
-      cliente: "client",
-      client: "client",
+      bug: "dev",
+      fix: "dev",
+      error: "dev",
+      cliente: "meeting",
+      client: "meeting",
       idea: "idea",
+      aprendizaje: "learning",
+      estudio: "learning",
+      learning: "learning",
+      curso: "learning",
     };
 
     if (categoryMap[potentialCategory]) {
@@ -426,10 +443,11 @@ export function parseAgendarLine(line: string): { date: string; time: string; ti
  */
 export function detectCategoryFromText(text: string): TimelineItem["type"] {
   const lowercase = text.toLowerCase();
-  if (BUG_KEYWORDS.some(k => lowercase.includes(k))) return "bug";
-  if (CLIENT_KEYWORDS.some(k => lowercase.includes(k))) return "client";
-  if (MEETING_KEYWORDS.some(k => lowercase.includes(k))) return "meeting";
+  if (BUG_KEYWORDS.some(k => lowercase.includes(k))) return "dev";
   if (DEV_KEYWORDS.some(k => lowercase.includes(k))) return "dev";
+  if (CLIENT_KEYWORDS.some(k => lowercase.includes(k))) return "meeting";
+  if (MEETING_KEYWORDS.some(k => lowercase.includes(k))) return "meeting";
+  if (LEARNING_KEYWORDS.some(k => lowercase.includes(k))) return "learning";
   if (IDEA_KEYWORDS.some(k => lowercase.includes(k))) return "idea";
   return "personal";
 }

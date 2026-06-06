@@ -269,28 +269,24 @@ export default function EnfoquePage() {
                 className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-sm ${
                   selectedTask.type === "dev"
                     ? "bg-[#7c6fe0]/15 text-[#7c6fe0]"
-                    : selectedTask.type === "bug"
-                    ? "bg-red-500/10 text-red-400"
                     : selectedTask.type === "meeting"
                     ? "bg-blue-500/10 text-blue-400"
-                    : selectedTask.type === "client"
-                    ? "bg-[#2dd4a0]/15 text-[#2dd4a0]"
-                    : selectedTask.type === "personal"
-                    ? "bg-pink-500/10 text-pink-400"
-                    : "bg-[#d4a06a]/15 text-[#d4a06a]"
+                    : selectedTask.type === "learning"
+                    ? "bg-sky-500/10 text-sky-400"
+                    : selectedTask.type === "idea"
+                    ? "bg-[#d4a06a]/15 text-[#d4a06a]"
+                    : "bg-pink-500/10 text-pink-400"
                 }`}
               >
                 {selectedTask.type === "dev"
                   ? "Desarrollo"
-                  : selectedTask.type === "bug"
-                  ? "Bug"
                   : selectedTask.type === "meeting"
                   ? "Reunión"
-                  : selectedTask.type === "client"
-                  ? "Cliente"
-                  : selectedTask.type === "personal"
-                  ? "Personal"
-                  : "Idea"}
+                  : selectedTask.type === "learning"
+                  ? "Estudio"
+                  : selectedTask.type === "idea"
+                  ? "Idea"
+                  : "Personal"}
               </span>
               {selectedTask.time && (
                 <span className="text-[9px] font-mono text-text-secondary">

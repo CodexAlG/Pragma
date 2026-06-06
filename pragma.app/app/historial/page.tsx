@@ -526,17 +526,23 @@ export default function HistorialPage() {
                               <span className={`text-[9px] font-mono uppercase w-max mt-1 px-1.5 py-0.5 rounded-sm ${
                                 item.type === "dev"
                                   ? "bg-[#7c6fe0]/10 text-[#7c6fe0]"
-                                  : item.type === "bug"
-                                  ? "bg-red-500/10 text-red-400"
                                   : item.type === "meeting"
                                   ? "bg-blue-500/10 text-blue-400"
-                                  : item.type === "client"
-                                  ? "bg-[#2dd4a0]/10 text-[#2dd4a0]"
-                                  : item.type === "personal"
-                                  ? "bg-pink-500/10 text-pink-400"
-                                  : "bg-[#d4a06a]/10 text-[#d4a06a]"
+                                  : item.type === "learning"
+                                  ? "bg-sky-500/10 text-sky-400"
+                                  : item.type === "idea"
+                                  ? "bg-[#d4a06a]/10 text-[#d4a06a]"
+                                  : "bg-pink-500/10 text-pink-400"
                               }`}>
-                                {item.type === "personal" ? "Personal" : item.type}
+                                {item.type === "dev"
+                                  ? "Desarrollo"
+                                  : item.type === "meeting"
+                                  ? "Reunión"
+                                  : item.type === "learning"
+                                  ? "Estudio"
+                                  : item.type === "idea"
+                                  ? "Idea"
+                                  : "Personal"}
                               </span>
                             </div>
 
@@ -602,15 +608,13 @@ export default function HistorialPage() {
                                       <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
                                         item.type === "dev"
                                           ? "bg-[#7c6fe0]"
-                                          : item.type === "bug"
-                                          ? "bg-red-400"
                                           : item.type === "meeting"
                                           ? "bg-blue-400"
-                                          : item.type === "client"
-                                          ? "bg-[#2dd4a0]"
-                                          : item.type === "personal"
-                                          ? "bg-pink-400"
-                                          : "bg-[#d4a06a]"
+                                          : item.type === "learning"
+                                          ? "bg-sky-400"
+                                          : item.type === "idea"
+                                          ? "bg-[#d4a06a]"
+                                          : "bg-pink-400"
                                       }`} />
                                       <span className="font-mono text-[9px] text-text-secondary shrink-0">
                                         {item.time.split(" - ")[0]}
@@ -700,8 +704,7 @@ export default function HistorialPage() {
                     >
                       <option value="meeting">Reunión</option>
                       <option value="dev">Desarrollo</option>
-                      <option value="bug">Bug</option>
-                      <option value="client">Cliente</option>
+                      <option value="learning">Estudio</option>
                       <option value="idea">Idea</option>
                       <option value="personal">Personal</option>
                     </select>

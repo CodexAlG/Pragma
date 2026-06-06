@@ -9,7 +9,7 @@ export interface TimelineItem {
   id: string;
   time: string;
   title: string;
-  type: "dev" | "meeting" | "client" | "bug" | "idea" | "personal";
+  type: "dev" | "meeting" | "client" | "bug" | "idea" | "personal" | "learning";
   status: "done" | "active" | "pending";
 }
 

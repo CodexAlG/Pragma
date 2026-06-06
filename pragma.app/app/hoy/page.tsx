@@ -44,9 +44,119 @@ export default function HoyPage() {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Sync profile data on load
+  // Inline editing state
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [editingTime, setEditingTime] = useState("");
+  const [editingType, setEditingType] = useState<TimelineItem["type"]>("dev");
+
+  const handleStartEdit = (item: TimelineItem) => {
+    setEditingItemId(item.id);
+    setEditingTitle(item.title);
+    setEditingTime(item.time);
+    setEditingType(item.type);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItemId(null);
+  };
+
+  const handleSaveInlineEdit = async (itemId: string) => {
+    if (!editingTitle.trim()) {
+      triggerToast("La descripción no puede estar vacía.");
+      return;
+    }
+
+    const updatedTimeline = timeline.map(item => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          title: editingTitle.trim(),
+          time: editingTime.trim(),
+          type: editingType,
+        };
+      }
+      return item;
+    });
+
+    updatedTimeline.sort((a, b) => a.time.localeCompare(b.time));
+    setTimeline(updatedTimeline);
+    setEditingItemId(null);
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    let updatedHistory = [...(dayData?.history || [])];
+
+    // Double sync to history
+    updatedHistory = updatedHistory.filter(h => h.date !== todayStr);
+    updatedHistory.push({
+      date: todayStr,
+      timeline: updatedTimeline,
+      effort_distribution: calculateEffort(updatedTimeline),
+    });
+
+    const dayDataPayload: DayData = {
+      ...dayData,
+      current_day: {
+        ...(dayData?.current_day || { date: todayStr, raw_text: "", flags: [], context_answers: {}, timeline: [] }),
+        timeline: updatedTimeline,
+      },
+      history: updatedHistory,
+    };
+
+    const success = await updateDayData(dayDataPayload);
+    if (success) {
+      triggerToast("Evento actualizado.");
+    } else {
+      triggerToast("Error al guardar en el servidor.");
+    }
+  };
+
+  // Sync profile data on load & handle rollover
   useEffect(() => {
-    if (dayData && dayData.current_day) {
+    if (!dayData) return;
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const currentDayDate = dayData.current_day?.date || "";
+
+    if (currentDayDate && currentDayDate !== todayStr) {
+      // Rollover to new day!
+      const handleRollover = async () => {
+        let updatedHistory = [...(dayData.history || [])];
+
+        // 1. Archive old day to history (if it had a timeline)
+        if (dayData.current_day && dayData.current_day.timeline && dayData.current_day.timeline.length > 0) {
+          updatedHistory = updatedHistory.filter(h => h.date !== currentDayDate);
+          updatedHistory.push({
+            date: currentDayDate,
+            timeline: dayData.current_day.timeline,
+            effort_distribution: calculateEffort(dayData.current_day.timeline),
+          });
+        }
+
+        // 2. Check if today already has a history entry (scheduled in advance)
+        const todayHistoryEntry = updatedHistory.find(h => h.date === todayStr);
+        const todayTimeline = todayHistoryEntry ? todayHistoryEntry.timeline : [];
+
+        // 3. Construct new current_day
+        const newCurrentDay = {
+          date: todayStr,
+          raw_text: "",
+          flags: [],
+          context_answers: {},
+          timeline: todayTimeline,
+        };
+
+        const dayDataPayload: DayData = {
+          ...dayData,
+          current_day: newCurrentDay,
+          history: updatedHistory,
+        };
+
+        await updateDayData(dayDataPayload);
+      };
+
+      handleRollover();
+    } else if (dayData.current_day) {
       const dd = dayData.current_day;
       setRawText(dd.raw_text || "");
       setFlags(dd.flags || []);
@@ -61,6 +171,8 @@ export default function HoyPage() {
       if (dd.timeline && dd.timeline.length > 0) {
         setShowResults(true);
         setEffortDist(calculateEffort(dd.timeline));
+      } else {
+        setShowResults(false);
       }
     }
   }, [dayData]);
@@ -206,9 +318,9 @@ export default function HoyPage() {
       ...dayData,
       current_day: {
         date: new Date().toISOString().split("T")[0],
-        raw_text: rawText,
-        flags,
-        context_answers: contextAnswers,
+        raw_text: "",
+        flags: [],
+        context_answers: {},
         timeline: parsedTimeline,
       },
       vault: updatedVault,
@@ -218,6 +330,14 @@ export default function HoyPage() {
     const success = await updateDayData(dayDataPayload);
     if (success) {
       triggerToast(dayData?.current_day?.timeline && dayData.current_day.timeline.length > 0 ? "¡Tu día ha sido re-orquestado!" : "¡Tu día ha sido orquestado y guardado!");
+      setRawText("");
+      setFlags([]);
+      setContextAnswers({
+        branch_or_pr: "",
+        meeting_time: "",
+        bug_duration: "",
+        save_to_vault: false,
+      });
     } else {
       triggerToast("Error al guardar en el servidor.");
     }
@@ -226,8 +346,7 @@ export default function HoyPage() {
   const categories: { value: TimelineItem["type"]; label: string; color: string }[] = [
     { value: "meeting", label: "Reunión", color: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
     { value: "dev", label: "Desarrollo", color: "bg-[#7c6fe0]/10 text-[#7c6fe0] border-[#7c6fe0]/20" },
-    { value: "bug", label: "Bug", color: "bg-red-500/10 text-red-400 border-red-500/20" },
-    { value: "client", label: "Cliente", color: "bg-[#2dd4a0]/10 text-[#2dd4a0] border-[#2dd4a0]/20" },
+    { value: "learning", label: "Estudio", color: "bg-sky-500/10 text-sky-400 border-sky-500/20" },
     { value: "idea", label: "Idea", color: "bg-[#d4a06a]/10 text-[#d4a06a] border-[#d4a06a]/20" },
     { value: "personal", label: "Personal", color: "bg-pink-500/10 text-pink-400 border-pink-500/20" },
   ];
@@ -374,12 +493,17 @@ export default function HoyPage() {
           <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
             {flags.includes("dev") && (
               <span className="inline-flex items-center px-2.5 py-1 bg-[#7c6fe0]/10 border border-[#7c6fe0]/20 text-[#7c6fe0] rounded-md text-xs font-mono select-none">
-                Revisión/Código
+                Desarrollo/Código
               </span>
             )}
             {flags.includes("meeting") && (
-              <span className="inline-flex items-center px-2.5 py-1 bg-[#7c6fe0]/10 border border-[#7c6fe0]/20 text-[#7c6fe0] rounded-md text-xs font-mono select-none">
+              <span className="inline-flex items-center px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-md text-xs font-mono select-none">
                 Gestión/Reunión
+              </span>
+            )}
+            {flags.includes("learning") && (
+              <span className="inline-flex items-center px-2.5 py-1 bg-sky-500/10 border border-sky-500/20 text-sky-400 rounded-md text-xs font-mono select-none">
+                Estudio/Aprendizaje
               </span>
             )}
             {flags.includes("idea") && (
@@ -387,9 +511,14 @@ export default function HoyPage() {
                 Idea detectada
               </span>
             )}
+            {flags.includes("personal") && (
+              <span className="inline-flex items-center px-2.5 py-1 bg-pink-500/10 border border-pink-500/20 text-pink-400 rounded-md text-xs font-mono select-none">
+                Asunto Personal
+              </span>
+            )}
             {flags.length === 0 && (
               <span className="text-xs text-text-hint font-mono select-none py-1 leading-relaxed">
-                Palabras clave: <span className="text-text-secondary">reunión/sincro</span> (Gestión), <span className="text-text-secondary">código/pr</span> (Desarrollo), <span className="text-text-secondary">bug/fix</span> (Bugs), <span className="text-[#d4a06a]">idea</span> (Bóveda), <span className="text-pink-400">personal/casa</span> (Personal) o <span className="text-[#7c6fe0]">Agendar: 15 de junio, Cita</span>.
+                Palabras clave: <span className="text-text-secondary">reunión/sincro</span> (Gestión), <span className="text-text-secondary">código/pr/bug</span> (Desarrollo), <span className="text-pink-400">personal/casa</span> (Personal), <span className="text-sky-400">curso/estudio</span> (Estudio), <span className="text-[#d4a06a]">idea</span> (Bóveda) o <span className="text-[#7c6fe0]">Agendar: 15 de junio, Cita</span>.
               </span>
             )}
           </div>
@@ -641,8 +770,70 @@ export default function HoyPage() {
                 <div className="absolute left-[9px] top-3 bottom-3 w-px bg-white/5" />
 
                 {timeline.map((item, index) => {
+                  const isEditing = editingItemId === item.id;
                   const isCompleted = item.status === "done";
                   const isIdea = item.type === "idea";
+
+                  if (isEditing) {
+                    return (
+                      <div
+                        key={item.id || index}
+                        className="relative flex flex-col gap-3 p-3 rounded-lg border border-[#7c6fe0]/40 bg-[#1a2236]/80 animate-fade-in"
+                      >
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[9px] text-text-secondary font-bold uppercase tracking-wider">Descripción</label>
+                          <input
+                            type="text"
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            className="w-full bg-[#0a0e1a] border border-white/5 focus:border-[#7c6fe0]/40 rounded-md px-2.5 py-1.5 text-xs text-text-primary focus:outline-hidden"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[9px] text-text-secondary font-bold uppercase tracking-wider">Horario (ej. 14:00 - 15:00 o 14:00)</label>
+                            <input
+                              type="text"
+                              value={editingTime}
+                              onChange={(e) => setEditingTime(e.target.value)}
+                              className="w-full bg-[#0a0e1a] border border-white/5 focus:border-[#7c6fe0]/40 rounded-md px-2.5 py-1.5 text-xs text-text-primary focus:outline-hidden"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[9px] text-text-secondary font-bold uppercase tracking-wider">Categoría</label>
+                            <select
+                              value={editingType}
+                              onChange={(e) => setEditingType(e.target.value as any)}
+                              className="w-full bg-[#0a0e1a] border border-white/5 focus:border-[#7c6fe0]/40 rounded-md px-2.5 py-1.5 text-xs text-text-primary focus:outline-hidden"
+                            >
+                              <option value="meeting">Reunión</option>
+                              <option value="dev">Desarrollo</option>
+                              <option value="learning">Estudio</option>
+                              <option value="idea">Idea</option>
+                              <option value="personal">Personal</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 justify-end pt-1">
+                          <button
+                            onClick={handleCancelEdit}
+                            className="px-2.5 py-1 bg-white/[0.02] hover:bg-white/5 border border-white/5 rounded text-[10px] font-semibold text-text-secondary hover:text-white transition-colors cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={() => handleSaveInlineEdit(item.id)}
+                            className="px-2.5 py-1 bg-[#7c6fe0] hover:bg-[#685ad8] rounded text-[10px] font-semibold text-white transition-colors cursor-pointer"
+                          >
+                            Guardar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
 
                   return (
                     <div
@@ -673,7 +864,10 @@ export default function HoyPage() {
                       </div>
 
                       {/* Content */}
-                      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                      <div
+                        onClick={() => handleStartEdit(item)}
+                        className="flex-1 min-w-0 flex flex-col gap-0.5 cursor-pointer group/content"
+                      >
                         <div className="flex items-baseline gap-2.5 flex-wrap">
                           {item.time && (
                             <span className={`font-mono text-xs ${
@@ -683,13 +877,16 @@ export default function HoyPage() {
                             </span>
                           )}
                           <h4
-                            className={`text-sm font-medium leading-tight break-words ${
+                            className={`text-sm font-medium leading-tight break-words flex items-center gap-1.5 ${
                               isCompleted
                                 ? "text-text-secondary line-through decoration-white/10"
                                 : "text-white"
                             }`}
                           >
                             {item.title}
+                            <span className="text-[10px] text-text-hint/40 group-hover/content:text-text-hint transition-colors opacity-0 group-hover/content:opacity-100 font-normal">
+                              (editar)
+                            </span>
                           </h4>
                         </div>
 
@@ -698,27 +895,23 @@ export default function HoyPage() {
                           <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded-sm ${
                             item.type === "dev"
                               ? "bg-[#7c6fe0]/10 text-[#7c6fe0]"
-                              : item.type === "bug"
-                              ? "bg-red-500/10 text-red-400"
                               : item.type === "meeting"
                               ? "bg-blue-500/10 text-blue-400"
-                              : item.type === "client"
-                              ? "bg-[#2dd4a0]/10 text-[#2dd4a0]"
-                              : item.type === "personal"
-                              ? "bg-pink-500/10 text-pink-400"
-                              : "bg-[#d4a06a]/10 text-[#d4a06a]"
+                              : item.type === "learning"
+                              ? "bg-sky-500/10 text-sky-400"
+                              : item.type === "idea"
+                              ? "bg-[#d4a06a]/10 text-[#d4a06a]"
+                              : "bg-pink-500/10 text-pink-400"
                           }`}>
                             {item.type === "dev"
                               ? "Desarrollo"
-                              : item.type === "bug"
-                              ? "Bug"
                               : item.type === "meeting"
                               ? "Reunión"
-                              : item.type === "client"
-                              ? "Cliente"
-                              : item.type === "personal"
-                              ? "Personal"
-                              : "Idea"}
+                              : item.type === "learning"
+                              ? "Estudio"
+                              : item.type === "idea"
+                              ? "Idea"
+                              : "Personal"}
                           </span>
                           {isCompleted && (
                             <span className="text-[10px] font-mono uppercase text-[#2dd4a0]">
