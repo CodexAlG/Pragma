@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { pragmaDb, VaultItem, DayData, PragmaUser } from "../lib/supabase";
 import { autoTagIdea } from "../lib/parser";
-import { registerServiceWorker, subscribeToPush } from "../lib/webpush";
+import { usePushSubscription } from "../lib/usePushSubscription";
 import {
   Calendar,
   Target,
@@ -296,50 +296,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const activeNotifications = getNotifications();
 
-  // Register Service Worker + subscribe to Web Push (runs once on non-auth pages)
-  useEffect(() => {
-    if (isAuthPage || typeof window === "undefined") return;
-
-    const setupPush = async () => {
-      // 1. Registrar el Service Worker
-      await registerServiceWorker();
-
-      // 2. Si ya tiene permiso granted, subscribir directamente
-      if (Notification.permission === "denied") return;
-
-      const subscription = await subscribeToPush();
-      if (!subscription) return;
-
-      // 3. Obtener el JWT de la sesión activa
-      const { data: { session } } = await (await import("../lib/supabase")).supabase.auth.getSession();
-      if (!session?.access_token) {
-        console.warn("[WebPush] No hay sesión activa, no se puede guardar suscripción");
-        return;
-      }
-
-      // 4. Enviar la suscripción al servidor con el token de autenticación
-      try {
-        const res = await fetch("/api/push-subscribe", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ subscription: subscription.toJSON() }),
-        });
-        if (res.ok) {
-          console.log("[WebPush] ✅ Suscripción guardada en servidor — notificaciones push activas");
-        } else {
-          const err = await res.json().catch(() => ({}));
-          console.error("[WebPush] ❌ Error guardando suscripción:", res.status, err);
-        }
-      } catch (err) {
-        console.error("[WebPush] Error guardando suscripción:", err);
-      }
-    };
-
-    setupPush();
-  }, [isAuthPage]);
+  usePushSubscription(user?.id ?? null);
 
 
   // Monitor and fire browser notifications when app is active

@@ -37,6 +37,10 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#7c6fe0" />
+      </head>
       <body className="min-h-full flex flex-col bg-background text-text-primary antialiased">
         <AppLayout>{children}</AppLayout>
       </body>
