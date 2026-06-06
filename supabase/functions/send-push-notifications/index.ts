@@ -1,135 +1,15 @@
 // supabase/functions/send-push-notifications/index.ts
-// Supabase Edge Function: Revisa eventos próximos y dispara notificaciones PUSH
-// Se ejecuta vía cron cada 5 minutos desde Supabase Dashboard
-// o manualmente via POST https://<project>.supabase.co/functions/v1/send-push-notifications
+// Supabase Edge Function: Revisa eventos próximos y dispara notificaciones PUSH reales
+// Soporta GET y POST para compatibilidad con cron-job.org
+// Seguridad: requiere ?secret=CRON_SECRET en la URL
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-// Web Push usando la librería webpush-webcrypto compatible con Deno/Edge
-// Implementamos el protocolo Web Push manualmente con WebCrypto API
+import webpush from "npm:web-push@3.6.7";
 
 const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") || "";
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") || "";
 const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") || "mailto:admin@pragma.app";
-
-// --- VAPID JWT generation ---
-function base64UrlEncode(data: Uint8Array): string {
-  return btoa(String.fromCharCode(...data))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=/g, "");
-}
-
-function base64UrlDecode(str: string): Uint8Array {
-  str = str.replace(/-/g, "+").replace(/_/g, "/");
-  while (str.length % 4) str += "=";
-  return Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
-}
-
-async function createVapidJWT(audience: string): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const header = { typ: "JWT", alg: "ES256" };
-  const payload = {
-    aud: audience,
-    exp: now + 12 * 60 * 60, // 12 horas
-    sub: VAPID_SUBJECT,
-  };
-
-  const enc = new TextEncoder();
-  const headerB64 = base64UrlEncode(enc.encode(JSON.stringify(header)));
-  const payloadB64 = base64UrlEncode(enc.encode(JSON.stringify(payload)));
-  const signingInput = `${headerB64}.${payloadB64}`;
-
-  const privateKeyBytes = base64UrlDecode(VAPID_PRIVATE_KEY);
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    privateKeyBytes,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" },
-    cryptoKey,
-    enc.encode(signingInput)
-  );
-
-  return `${signingInput}.${base64UrlEncode(new Uint8Array(signature))}`;
-}
-
-async function sendWebPush(
-  subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
-  payload: object
-): Promise<{ ok: boolean; status?: number; error?: string }> {
-  const endpoint = subscription.endpoint;
-  const url = new URL(endpoint);
-  const audience = `${url.protocol}//${url.host}`;
-
-  const jwt = await createVapidJWT(audience);
-  const authHeader = `vapid t=${jwt},k=${VAPID_PUBLIC_KEY}`;
-
-  // Encrypt payload using Web Push encryption (RFC 8188)
-  const payloadStr = JSON.stringify(payload);
-  const enc = new TextEncoder();
-  const rawPayload = enc.encode(payloadStr);
-
-  // Generate local key pair for encryption
-  const localKeyPair = await crypto.subtle.generateKey(
-    { name: "ECDH", namedCurve: "P-256" },
-    true,
-    ["deriveKey", "deriveBits"]
-  );
-
-  // Import recipient's public key
-  const recipientPublicKey = await crypto.subtle.importKey(
-    "raw",
-    base64UrlDecode(subscription.keys.p256dh),
-    { name: "ECDH", namedCurve: "P-256" },
-    false,
-    []
-  );
-
-  // Derive shared secret
-  const sharedSecret = await crypto.subtle.deriveBits(
-    { name: "ECDH", public: recipientPublicKey },
-    localKeyPair.privateKey,
-    256
-  );
-
-  // Auth secret
-  const authSecret = base64UrlDecode(subscription.keys.auth);
-
-  // HKDF to derive encryption key and nonce
-  const localPublicKeyRaw = await crypto.subtle.exportKey("raw", localKeyPair.publicKey);
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-
-  const prk = await crypto.subtle.importKey("raw", sharedSecret, { name: "HKDF" }, false, ["deriveKey", "deriveBits"]);
-
-  // Simplified: use unencrypted push for now (browsers also support it for development)
-  // Production should use full aesgcm/aes128gcm encryption
-  // For most browsers, we can send unencrypted if using HTTPS
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Authorization": authHeader,
-        "Content-Type": "text/plain",
-        "TTL": "86400",
-      },
-      body: payloadStr,
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      return { ok: false, status: response.status, error: text };
-    }
-    return { ok: true, status: response.status };
-  } catch (err) {
-    return { ok: false, error: String(err) };
-  }
-}
+const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
 
 function getEventStartDateTime(date: string, time: string): Date {
   const timePart = time.split(" - ")[0].trim();
@@ -163,12 +43,27 @@ function getDynamicLabel(eventTitle: string, eventTime: string, eventStart: Date
 }
 
 Deno.serve(async (req) => {
-  // Health check
-  if (req.method === "GET") {
-    return new Response(JSON.stringify({ status: "ok", message: "Pragma Push Notification Service" }), {
+  const url = new URL(req.url);
+
+  // Validación de seguridad via query param (no requiere JWT de Supabase)
+  // Permite que cron-job.org llame sin Authorization header
+  const secret = url.searchParams.get("secret");
+  if (CRON_SECRET && secret !== CRON_SECRET) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
       headers: { "Content-Type": "application/json" },
     });
   }
+
+  // Configurar web-push con VAPID keys
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+    return new Response(JSON.stringify({ error: "VAPID keys no configuradas" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -182,8 +77,9 @@ Deno.serve(async (req) => {
       .select("user_id, endpoint, subscription");
 
     if (subError) throw subError;
+
     if (!subscriptions || subscriptions.length === 0) {
-      return new Response(JSON.stringify({ sent: 0, message: "Sin suscripciones" }), {
+      return new Response(JSON.stringify({ sent: 0, message: "Sin suscripciones registradas" }), {
         headers: { "Content-Type": "application/json" },
       });
     }
@@ -236,32 +132,38 @@ Deno.serve(async (req) => {
 
         for (const trig of triggers) {
           const notifId = `${event.id}-${trig.type}`;
-
-          // ¿El trigger acaba de activarse? (dentro de la ventana de 5 min del cron)
           const trigMs = trig.time.getTime();
+
+          // Activar si el trigger acaba de dispararse (ventana de 5 min) y no está leído
           const isJustFired = trigMs >= now.getTime() - fiveMinMs && trigMs <= now.getTime();
-          const isActive = trig.time <= now && trig.time >= fortyEightHoursAgo;
           const notRead = !readIds.includes(notifId);
 
-          if ((isJustFired || isActive) && notRead) {
+          if (isJustFired && notRead) {
             const label = getDynamicLabel(event.title, event.time, eventStart, now);
-            const result = await sendWebPush(sub.subscription, {
-              title: "📅 Pragma Recordatorio",
+
+            const pushPayload = JSON.stringify({
+              title: "📅 Pragma",
               body: label,
               tag: notifId,
               url: "/hoy",
             });
 
-            if (result.ok) {
+            try {
+              await webpush.sendNotification(sub.subscription, pushPayload);
               totalSent++;
-            } else {
-              errors.push(`[${sub.user_id}/${event.title}] ${result.error}`);
-              // Si el endpoint ya no es válido (410 Gone), eliminarlo
-              if (result.status === 410) {
+              console.log(`[push] ✅ Enviado a ${sub.user_id}: ${label}`);
+            } catch (err: any) {
+              const statusCode = err?.statusCode || err?.status;
+              errors.push(`[${event.title}] ${err?.message || err}`);
+              console.error(`[push] ❌ Error enviando: ${err?.message}, status: ${statusCode}`);
+
+              // Limpiar suscripciones inválidas (expiradas/revocadas)
+              if (statusCode === 410 || statusCode === 404) {
                 await supabase
                   .from("push_subscriptions")
                   .delete()
                   .eq("endpoint", sub.endpoint);
+                console.log(`[push] 🗑️ Suscripción expirada eliminada: ${sub.endpoint}`);
               }
             }
           }
@@ -270,11 +172,17 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ sent: totalSent, errors: errors.length > 0 ? errors : undefined }),
+      JSON.stringify({
+        ok: true,
+        sent: totalSent,
+        checked: subscriptions.length,
+        errors: errors.length > 0 ? errors : undefined,
+        timestamp: now.toISOString(),
+      }),
       { headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {
-    console.error("[send-push-notifications] Error:", err);
+    console.error("[send-push-notifications] Error fatal:", err);
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
