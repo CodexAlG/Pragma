@@ -7,7 +7,6 @@ import { pragmaDb } from "../../lib/supabase";
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [isMock, setIsMock] = useState(false);
 
   useEffect(() => {
     // Check if user is already logged in
@@ -18,7 +17,6 @@ export default function LoginPage() {
       }
     }
     checkUser();
-    setIsMock(pragmaDb.isMock());
   }, [router]);
 
   const handleGoogleLogin = async () => {
@@ -79,16 +77,6 @@ export default function LoginPage() {
           )}
           <span>Continuar con Google</span>
         </button>
-
-        {/* Mock auth status banner */}
-        {isMock && (
-          <div className="mt-8 px-3 py-1.5 bg-[#1a2236]/80 border border-white/5 rounded-full flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#2dd4a0]"></span>
-            <span className="font-mono text-[10px] text-text-secondary uppercase tracking-wider">
-              Local Mock-Auth Activo
-            </span>
-          </div>
-        )}
       </div>
     </div>
   );
