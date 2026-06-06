@@ -312,11 +312,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       // 3. Obtener el JWT de la sesión activa
       const { data: { session } } = await (await import("../lib/supabase")).supabase.auth.getSession();
-      if (!session?.access_token) return;
+      if (!session?.access_token) {
+        console.warn("[WebPush] No hay sesión activa, no se puede guardar suscripción");
+        return;
+      }
 
       // 4. Enviar la suscripción al servidor con el token de autenticación
       try {
-        await fetch("/api/push-subscribe", {
+        const res = await fetch("/api/push-subscribe", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -324,6 +327,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           },
           body: JSON.stringify({ subscription: subscription.toJSON() }),
         });
+        if (res.ok) {
+          console.log("[WebPush] ✅ Suscripción guardada en servidor — notificaciones push activas");
+        } else {
+          const err = await res.json().catch(() => ({}));
+          console.error("[WebPush] ❌ Error guardando suscripción:", res.status, err);
+        }
       } catch (err) {
         console.error("[WebPush] Error guardando suscripción:", err);
       }
