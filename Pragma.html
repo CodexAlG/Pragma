@@ -1,0 +1,256 @@
+<!DOCTYPE html><html class="dark" lang="es"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Day Orchestrator - Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-fixed": "#002115",
+                    "primary-fixed": "#e4dfff",
+                    "inverse-on-surface": "#2c303d",
+                    "on-error-container": "#ffdad6",
+                    "on-tertiary": "#4a2800",
+                    "surface-container": "#1b1f2c",
+                    "on-tertiary-fixed-variant": "#6a3b00",
+                    "on-primary-fixed": "#170065",
+                    "tertiary": "#ffb872",
+                    "tertiary-fixed-dim": "#ffb872",
+                    "on-secondary": "#003827",
+                    "tertiary-container": "#c28343",
+                    "primary-container": "#8e81f4",
+                    "outline-variant": "#474553",
+                    "secondary-container": "#03c593",
+                    "on-primary": "#2c158d",
+                    "error": "#ffb4ab",
+                    "secondary-fixed": "#63fcc5",
+                    "outline": "#928f9e",
+                    "surface-dim": "#0f131f",
+                    "on-primary-container": "#250787",
+                    "on-primary-fixed-variant": "#4333a3",
+                    "surface-variant": "#313442",
+                    "on-secondary-fixed-variant": "#00513a",
+                    "error-container": "#93000a",
+                    "surface": "#0f131f",
+                    "secondary": "#42e2ad",
+                    "secondary-fixed-dim": "#3edfaa",
+                    "on-surface": "#dfe2f3",
+                    "surface-tint": "#c7bfff",
+                    "primary": "#c7bfff",
+                    "on-error": "#690005",
+                    "surface-container-highest": "#313442",
+                    "inverse-primary": "#5b4dbd",
+                    "on-tertiary-container": "#412200",
+                    "surface-container-high": "#262a37",
+                    "tertiary-fixed": "#ffdcbf",
+                    "on-secondary-container": "#004b36",
+                    "on-tertiary-fixed": "#2d1600",
+                    "surface-container-low": "#171b28",
+                    "surface-bright": "#353946",
+                    "on-surface-variant": "#c9c4d5",
+                    "on-background": "#dfe2f3",
+                    "surface-container-lowest": "#0a0e1a",
+                    "primary-fixed-dim": "#c7bfff",
+                    "background": "#0f131f",
+                    "inverse-surface": "#dfe2f3"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "margin-mobile": "16px",
+                    "panel-padding": "12px",
+                    "unit": "4px",
+                    "margin-desktop": "24px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "headline-lg": ["Geist"],
+                    "label-md": ["JetBrains Mono"],
+                    "body-sm": ["Geist"],
+                    "body-md": ["Geist"],
+                    "headline-lg-mobile": ["Geist"],
+                    "label-sm": ["JetBrains Mono"],
+                    "headline-md": ["Geist"]
+            },
+            "fontSize": {
+                    "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "500"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                    "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "label-sm": ["11px", {"lineHeight": "14px", "fontWeight": "400"}],
+                    "headline-md": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "500"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-surface-container-lowest text-on-surface font-body-sm min-h-screen flex flex-col">
+<!-- TopNavBar -->
+<nav class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-margin-desktop h-16 bg-surface-container-low border-b border-white/10">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-2 font-headline-md text-headline-md font-bold text-on-surface before:content-[''] before:w-2 before:h-2 before:bg-primary before:rounded-full before:animate-pulse">
+                DevFlow
+            </div>
+<div class="hidden md:flex gap-6">
+<a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-md text-label-md" href="#">Hoy</a>
+<a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200 font-label-md text-label-md" href="#">Enfoque</a>
+<a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200 font-label-md text-label-md" href="#">Proyectos</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-label-md text-label-md bg-surface-container-high px-3 py-1 rounded border border-white/10">Martes, 24 Oct</span>
+<button class="font-label-md text-label-md text-on-surface-variant border border-white/10 px-3 py-1.5 rounded hover:text-primary hover:border-primary transition-colors duration-200 bg-surface-container">Ideas guardadas</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-white/10" data-alt="A small, professional avatar placeholder showing a neutral portrait of a person. The styling is minimalist, high-contrast, fitting a developer tool interface with deep dark blues and subtle gray borders." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCe4b3S3pvxgr36K7ecyxLh8Zv6V54uFHnERzK9SwPva1FYtStWh3d7cVLzTQ8NTpB2zCKJRCAirXMQhVyK9jpIgQrFv6lTr8S8aly5X_nTCbL74vUh14jy6v2-f6eypV2Jd2Oku74r2AO6K5WCtk6tTmgbzjKba1DaNgvJJueOT4chUyEMrzZQJ_5DIsGGY9uYfP6uuNOPjireVXNtR6nc6zw3j47SRj3lEkiFjBuPAiBV4fkgjynhjqJ0mrdvvgw8aCqa60u_GE0">
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-1 mt-16 p-margin-desktop grid grid-cols-1 md:grid-cols-12 gap-gutter h-[calc(100vh-64px)] overflow-hidden">
+<!-- Left Column: Brain Dump (60%) -->
+<section class="md:col-span-7 flex flex-col h-full gap-4"><div class="bg-surface-container border border-white/10 rounded p-panel-padding flex flex-col gap-2">
+  <textarea class="w-full bg-transparent border-none text-on-surface font-body-md text-body-md resize-none focus:ring-0 p-0 placeholder-on-surface-variant/50" placeholder="Vuelca tu día aquí...">Revisión de código de 9 a 10. Reunión de equipo a las 11. Investigar el bug de la pasarela de pagos. IDEA: Implementar un sistema de caché para las peticiones de geolocalización.</textarea>
+  <div class="flex flex-wrap gap-2">
+    <span class="bg-primary/10 text-primary font-label-md text-label-md px-2 py-1 rounded border border-primary/20">Revisión de código</span>
+    <span class="bg-primary/10 text-primary font-label-md text-label-md px-2 py-1 rounded border border-primary/20">2 reuniones</span>
+    <span class="bg-secondary/10 text-secondary font-label-md text-label-md px-2 py-1 rounded border border-secondary/20">Idea detectada</span>
+  </div>
+</div>
+<div class="flex flex-col gap-2">
+  <div class="font-label-md text-label-md text-on-surface-variant">Resolución de contexto</div>
+  <div class="grid grid-cols-2 gap-4">
+    <div class="bg-surface-container border border-white/10 rounded p-panel-padding flex flex-col gap-2">
+      <div class="flex items-center gap-2 text-on-surface-variant">
+        <span class="material-symbols-outlined text-[16px]">code</span>
+        <span class="font-body-sm text-body-sm">¿Duración estimada para el bug?</span>
+      </div>
+      <input class="w-full bg-surface-container-lowest border border-white/10 rounded px-2 py-1 text-on-surface font-label-md text-label-md focus:border-primary focus:ring-0 outline-none" type="text" value="45 min">
+    </div>
+    <div class="bg-surface-container border border-white/10 rounded p-panel-padding flex flex-col gap-2">
+      <div class="flex items-center gap-2 text-on-surface-variant">
+        <span class="material-symbols-outlined text-[16px]">schedule</span>
+        <span class="font-body-sm text-body-sm">¿A qué hora es la segunda reunión?</span>
+      </div>
+      <input class="w-full bg-surface-container-lowest border border-white/10 rounded px-2 py-1 text-on-surface font-label-md text-label-md focus:border-primary focus:ring-0 outline-none" type="text" value="15:00">
+    </div>
+  </div>
+</div>
+<button class="w-full bg-[#7c6fe0] text-white font-label-md text-label-md font-bold py-3 rounded hover:opacity-90 transition-colors flex items-center justify-center gap-2">
+  <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
+  Orquestar mi día
+</button></section>
+<!-- Right Column: Orchestration View (40%) -->
+<section class="md:col-span-5 flex flex-col gap-panel-padding h-full overflow-y-auto pr-2">
+<!-- Effort Distribution -->
+<div class="bg-surface-container border border-white/10 rounded p-panel-padding flex flex-col gap-4">
+<div class="font-label-md text-label-md text-on-surface-variant">Distribución de esfuerzo</div>
+<div class="flex items-center gap-6">
+<!-- Fake Donut Chart via CSS Conic Gradient -->
+<div class="w-24 h-24 relative flex items-center justify-center">
+<svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+<circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#7c6fe0" stroke-dasharray="60 40" stroke-dashoffset="0" stroke-width="4"></circle>
+<circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#2dd4a0" stroke-dasharray="30 70" stroke-dashoffset="-60" stroke-width="4"></circle>
+<circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#e09d5a" stroke-dasharray="10 90" stroke-dashoffset="-90" stroke-width="4"></circle>
+</svg>
+</div>
+<div class="flex flex-col gap-2 flex-1">
+<div class="flex items-center gap-2 font-body-sm text-body-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span> Desarrollo técnico (60%)
+                        </div>
+<div class="flex items-center gap-2 font-body-sm text-body-sm">
+<span class="w-2 h-2 rounded-full bg-secondary"></span> Gestión (30%)
+                        </div>
+<div class="flex items-center gap-2 font-body-sm text-body-sm">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span> Ideas (10%)
+                        </div>
+</div>
+</div>
+</div>
+<!-- Progress -->
+<div class="bg-surface-container border border-white/10 rounded p-panel-padding flex flex-col gap-2">
+<div class="flex justify-between items-center font-label-md text-label-md">
+<span class="text-on-surface-variant">Progreso del día</span>
+<span class="text-on-surface">1 / 4 Completado</span>
+</div>
+<div class="h-1 bg-surface-container-lowest rounded-full overflow-hidden">
+<div class="h-full bg-secondary w-1/4"></div>
+</div>
+</div>
+<!-- Timeline -->
+<div class="bg-surface-container border border-white/10 rounded p-panel-padding flex-1 flex flex-col">
+<div class="font-label-md text-label-md text-on-surface-variant mb-4">Agenda orquestada</div>
+<div class="flex flex-col gap-0 relative">
+<!-- Timeline Line -->
+<div class="absolute left-[11px] top-4 bottom-4 w-px bg-white/10"></div>
+<!-- Item 1 -->
+<div class="flex items-start gap-4 py-3 relative z-10">
+<div class="bg-surface-container rounded-full mt-0.5"><span class="material-symbols-outlined text-[20px] text-secondary" style="font-variation-settings: 'FILL' 1;">check_circle</span></div>
+<div class="flex flex-col">
+<div class="flex items-baseline gap-2">
+<span class="font-label-md text-label-md text-on-surface-variant">09:00</span>
+<span class="font-body-md text-body-md text-on-surface">Revisión de código</span>
+</div>
+<span class="font-label-md text-label-md text-secondary">Completado</span>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex items-start gap-4 py-3 relative z-10 border-l-2 border-primary -ml-[1px] pl-[15px] bg-primary/5">
+<div class="bg-surface-container rounded-full mt-0.5 -ml-[2px]"><span class="material-symbols-outlined text-[20px] text-primary" style="font-variation-settings: 'FILL' 1;">play_circle</span></div>
+<div class="flex flex-col">
+<div class="flex items-baseline gap-2">
+<span class="font-label-md text-label-md text-primary">11:00</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Reunión de equipo</span>
+</div>
+<span class="font-label-md text-label-md text-primary">En curso</span>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="flex items-start gap-4 py-3 relative z-10">
+<div class="bg-surface-container rounded-full mt-0.5"><span class="material-symbols-outlined text-[20px] text-on-surface-variant">radio_button_unchecked</span></div>
+<div class="flex flex-col">
+<div class="flex items-baseline gap-2">
+<span class="font-label-md text-label-md text-on-surface-variant">15:00</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Segunda reunión</span>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant/50">Pendiente</span>
+</div>
+</div>
+<!-- Item 4 -->
+<div class="flex items-start gap-4 py-3 relative z-10">
+<div class="bg-surface-container rounded-full mt-0.5"><span class="material-symbols-outlined text-[20px] text-on-surface-variant">radio_button_unchecked</span></div>
+<div class="flex flex-col">
+<div class="flex items-baseline gap-2">
+<span class="font-label-md text-label-md text-on-surface-variant">16:30</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Investigar bug</span>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant/50">Pendiente</span>
+</div>
+</div>
+<!-- Idea -->
+<div class="flex items-start gap-4 py-3 relative z-10 mt-2 border-t border-white/10">
+<div class="bg-surface-container rounded-full mt-0.5"><span class="material-symbols-outlined text-[20px] text-tertiary" style="font-variation-settings: 'FILL' 1;">lightbulb</span></div>
+<div class="flex flex-col">
+<div class="flex items-baseline gap-2">
+<span class="font-label-md text-label-md text-tertiary">IDEA</span>
+<span class="font-body-md text-body-md text-on-surface">Caché geolocalización</span>
+</div>
+<span class="font-label-md text-label-md text-tertiary/70">Capturada</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+
+
+</body></html>
