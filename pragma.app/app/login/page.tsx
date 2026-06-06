@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { pragmaDb } from "../../lib/supabase";
+import { pragmaDb, supabase } from "../../lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,7 +22,13 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      await pragmaDb.signInWithGoogle();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) throw error;
     } catch (e) {
       console.error("Login failed:", e);
       setLoading(false);
