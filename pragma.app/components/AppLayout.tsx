@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { pragmaDb, VaultItem, DayData, PragmaUser } from "../lib/supabase";
 import { autoTagIdea } from "../lib/parser";
+import { registerServiceWorker, subscribeToPush } from "../lib/webpush";
 import {
   Calendar,
   Target,
@@ -223,6 +224,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       triggers.forEach(trig => {
         const id = `${event.id}-${trig.type}`;
         if (trig.time <= now && trig.time >= fortyEightHoursAgo && !readIds.includes(id)) {
+          // Calculate dynamic label based on difference from 'now'
+          const diffMs = eventStart.getTime() - now.getTime();
+          let dynamicLabel = trig.label;
+
+          if (diffMs > 0) {
+            const diffMins = Math.round(diffMs / (1000 * 60));
+            const diffHours = diffMs / (1000 * 60 * 60);
+
+            if (diffMins < 60) {
+              dynamicLabel = `En ${diffMins} min: ${event.title}`;
+            } else if (diffHours < 24) {
+              const roundedHours = Math.round(diffHours);
+              dynamicLabel = `Hoy a las ${event.time.split(" - ")[0]} (en ${roundedHours} ${roundedHours === 1 ? "hora" : "horas"}): ${event.title}`;
+            } else if (diffHours < 48) {
+              dynamicLabel = `Mañana a las ${event.time.split(" - ")[0]}: ${event.title}`;
+            } else {
+              dynamicLabel = `En ${Math.round(diffHours / 24)} días: ${event.title}`;
+            }
+          } else {
+            const passedMins = Math.round(-diffMs / (1000 * 60));
+            if (passedMins < 60) {
+              dynamicLabel = `Hace ${passedMins} min: ${event.title}`;
+            } else {
+              dynamicLabel = `Pasado (a las ${event.time.split(" - ")[0]}): ${event.title}`;
+            }
+          }
+
           notifications.push({
             id,
             eventTitle: event.title,
@@ -230,7 +258,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             eventTime: event.time,
             triggerTime: trig.time.toISOString(),
             type: trig.type,
-            label: trig.label
+            label: dynamicLabel
           });
         }
       });
@@ -268,12 +296,42 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const activeNotifications = getNotifications();
 
-  // Request browser permission for system notifications
+  // Register Service Worker + subscribe to Web Push (runs once on non-auth pages)
   useEffect(() => {
-    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  }, []);
+    if (isAuthPage || typeof window === "undefined") return;
+
+    const setupPush = async () => {
+      // 1. Registrar el Service Worker
+      await registerServiceWorker();
+
+      // 2. Si ya tiene permiso granted, subscribir directamente
+      if (Notification.permission === "denied") return;
+
+      const subscription = await subscribeToPush();
+      if (!subscription) return;
+
+      // 3. Obtener el JWT de la sesión activa
+      const { data: { session } } = await (await import("../lib/supabase")).supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      // 4. Enviar la suscripción al servidor con el token de autenticación
+      try {
+        await fetch("/api/push-subscribe", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ subscription: subscription.toJSON() }),
+        });
+      } catch (err) {
+        console.error("[WebPush] Error guardando suscripción:", err);
+      }
+    };
+
+    setupPush();
+  }, [isAuthPage]);
+
 
   // Monitor and fire browser notifications when app is active
   const lastCheckRef = useRef<number>(Date.now());

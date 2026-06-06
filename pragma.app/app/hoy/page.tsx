@@ -13,6 +13,7 @@ import {
   Lightbulb,
   Calendar,
   X,
+  Trash2,
 } from "lucide-react";
 
 export default function HoyPage() {
@@ -106,6 +107,41 @@ export default function HoyPage() {
     const success = await updateDayData(dayDataPayload);
     if (success) {
       triggerToast("Evento actualizado.");
+    } else {
+      triggerToast("Error al guardar en el servidor.");
+    }
+  };
+
+  // Delete single timeline item
+  const handleDeleteTimelineItem = async (itemId: string) => {
+    const updated = timeline.filter(item => item.id !== itemId);
+    setTimeline(updated);
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    let updatedHistory = [...(dayData?.history || [])];
+
+    // Sync to history as well
+    updatedHistory = updatedHistory.filter(h => h.date !== todayStr);
+    if (updated.length > 0) {
+      updatedHistory.push({
+        date: todayStr,
+        timeline: updated,
+        effort_distribution: calculateEffort(updated),
+      });
+    }
+
+    const dayDataPayload: DayData = {
+      ...dayData,
+      current_day: {
+        ...(dayData?.current_day || { date: todayStr, raw_text: "", flags: [], context_answers: {}, timeline: [] }),
+        timeline: updated,
+      },
+      history: updatedHistory,
+    };
+
+    const success = await updateDayData(dayDataPayload);
+    if (success) {
+      triggerToast("Evento eliminado.");
     } else {
       triggerToast("Error al guardar en el servidor.");
     }
@@ -838,7 +874,7 @@ export default function HoyPage() {
                   return (
                     <div
                       key={item.id || index}
-                      className={`relative flex items-start gap-4 p-3 rounded-lg border transition-all ${
+                      className={`group relative flex items-start gap-4 p-3 rounded-lg border transition-all ${
                         isCompleted
                           ? "bg-white/[0.01] border-white/5 opacity-60"
                           : isIdea
@@ -866,7 +902,7 @@ export default function HoyPage() {
                       {/* Content */}
                       <div
                         onClick={() => handleStartEdit(item)}
-                        className="flex-1 min-w-0 flex flex-col gap-0.5 cursor-pointer group/content"
+                        className="flex-1 min-w-0 flex flex-col gap-0.5 cursor-pointer group/content pr-6"
                       >
                         <div className="flex items-baseline gap-2.5 flex-wrap">
                           {item.time && (
@@ -920,6 +956,18 @@ export default function HoyPage() {
                           )}
                         </div>
                       </div>
+
+                      {/* Delete button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteTimelineItem(item.id);
+                        }}
+                        title="Eliminar evento"
+                        className="absolute top-3 right-3 text-text-hint hover:text-red-400 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   );
                 })}
