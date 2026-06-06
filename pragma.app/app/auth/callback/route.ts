@@ -28,9 +28,14 @@ export async function GET(request: Request) {
         },
       }
     );
-    await supabaseClient.auth.exchangeCodeForSession(code);
+    try {
+      await supabaseClient.auth.exchangeCodeForSession(code);
+      return NextResponse.redirect(`${origin}/hoy`);
+    } catch (error) {
+      console.error("Code exchange failed:", error);
+    }
   }
 
-  // Redirect to /hoy dashboard page
-  return NextResponse.redirect(`${origin}/hoy`);
+  // If there's no code or code exchange fails, redirect to /login
+  return NextResponse.redirect(`${origin}/login`);
 }
