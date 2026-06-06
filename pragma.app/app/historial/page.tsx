@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { HistoryItem, DayData, TimelineItem } from "../../lib/supabase";
 import { calculateEffort } from "../../lib/parser";
-import AppLayout, { useAppLayout } from "../../components/AppLayout";
+import { useAppLayout } from "../../components/AppLayout";
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,14 +14,6 @@ import {
   CheckCircle2,
   Circle,
 } from "lucide-react";
-
-export default function HistorialPage() {
-  return (
-    <AppLayout>
-      <HistorialDashboard />
-    </AppLayout>
-  );
-}
 
 const WEEKDAYS = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
 const MONTHS = [
@@ -39,7 +31,7 @@ const MONTHS = [
   "Diciembre",
 ];
 
-function HistorialDashboard() {
+export default function HistorialPage() {
   const { dayData } = useAppLayout();
 
   const [historyList, setHistoryList] = useState<HistoryItem[]>([]);

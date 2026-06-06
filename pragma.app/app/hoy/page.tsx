@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { pragmaDb, TimelineItem, VaultItem, DayData, HistoryItem } from "../../lib/supabase";
 import { detectFlags, parseBrainDump, calculateEffort, autoTagIdea } from "../../lib/parser";
-import AppLayout, { useAppLayout } from "../../components/AppLayout";
+import { useAppLayout } from "../../components/AppLayout";
 import {
   Sparkles,
   CheckCircle2,
@@ -14,14 +14,6 @@ import {
 } from "lucide-react";
 
 export default function HoyPage() {
-  return (
-    <AppLayout>
-      <HoyDashboard />
-    </AppLayout>
-  );
-}
-
-function HoyDashboard() {
   const router = useRouter();
   const { dayData, updateDayData, triggerToast, vault } = useAppLayout();
 

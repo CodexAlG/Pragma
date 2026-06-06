@@ -4,18 +4,10 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TimelineItem, DayData } from "../../lib/supabase";
-import AppLayout, { useAppLayout } from "../../components/AppLayout";
+import { useAppLayout } from "../../components/AppLayout";
 import { Play, Pause, RotateCcw, CheckCircle, Target, ArrowLeft } from "lucide-react";
 
 export default function EnfoquePage() {
-  return (
-    <AppLayout>
-      <EnfoqueDashboard />
-    </AppLayout>
-  );
-}
-
-function EnfoqueDashboard() {
   const router = useRouter();
   const { dayData, updateDayData, triggerToast } = useAppLayout();
 

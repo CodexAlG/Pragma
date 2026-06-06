@@ -40,14 +40,20 @@ export function useAppLayout() {
   return context;
 }
 
+// Persistent caching variables in module scope to prevent loading flickers on route change remounts
+let hasLoadedOnce = false;
+let cachedUser: PragmaUser | null = null;
+let cachedDayData: DayData | null = null;
+let cachedVault: VaultItem[] = [];
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [user, setUser] = useState<PragmaUser | null>(null);
-  const [dayData, setDayData] = useState<DayData | null>(null);
-  const [vault, setVault] = useState<VaultItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<PragmaUser | null>(cachedUser);
+  const [dayData, setDayData] = useState<DayData | null>(cachedDayData);
+  const [vault, setVault] = useState<VaultItem[]>(cachedVault);
+  const [loading, setLoading] = useState(!hasLoadedOnce);
 
   // UI state
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -65,32 +71,60 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     try {
       const activeUser = await pragmaDb.getUser();
       if (!activeUser) {
+        // Reset cache on redirect to login
+        hasLoadedOnce = false;
+        cachedUser = null;
+        cachedDayData = null;
+        cachedVault = [];
+        setUser(null);
+        setDayData(null);
+        setVault([]);
         router.push("/login");
         return;
       }
       setUser(activeUser);
+      cachedUser = activeUser;
 
       const profile = await pragmaDb.getProfile();
       if (profile && profile.day_data) {
         setDayData(profile.day_data);
+        cachedDayData = profile.day_data;
         setVault(profile.day_data.vault || []);
+        cachedVault = profile.day_data.vault || [];
       }
     } catch (e) {
       console.error("Error loading layout profile:", e);
     } finally {
       setLoading(false);
+      hasLoadedOnce = true;
     }
   };
 
+  const isAuthPage = pathname === "/login" || pathname === "/" || pathname?.startsWith("/auth");
+
   useEffect(() => {
-    loadProfile();
-  }, [router]);
+    if (!isAuthPage) {
+      loadProfile();
+    } else {
+      // Clear cache on auth pages
+      hasLoadedOnce = false;
+      cachedUser = null;
+      cachedDayData = null;
+      cachedVault = [];
+      setUser(null);
+      setDayData(null);
+      setVault([]);
+      setLoading(false);
+    }
+  }, [router, pathname, isAuthPage]);
 
   const refreshProfile = async () => {
     const profile = await pragmaDb.getProfile();
     if (profile && profile.day_data) {
       setDayData(profile.day_data);
+      cachedDayData = profile.day_data;
       setVault(profile.day_data.vault || []);
+      cachedVault = profile.day_data.vault || [];
     }
   };
 
@@ -98,7 +132,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const success = await pragmaDb.updateDayData(newDayData);
     if (success) {
       setDayData(newDayData);
+      cachedDayData = newDayData;
       setVault(newDayData.vault || []);
+      cachedVault = newDayData.vault || [];
     }
     return success;
   };
@@ -168,6 +204,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
     return `${days[d.getDay()]}, ${d.getDate().toString().padStart(2, "0")} ${months[d.getMonth()]}`;
   };
+
+  if (isAuthPage) {
+    return (
+      <AppLayoutContext.Provider
+        value={{
+          user,
+          dayData,
+          loading: false,
+          updateDayData,
+          triggerToast,
+          vault,
+          setVault,
+          refreshProfile,
+        }}
+      >
+        {children}
+      </AppLayoutContext.Provider>
+    );
+  }
 
   if (loading) {
     return (

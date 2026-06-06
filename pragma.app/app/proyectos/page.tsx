@@ -2,16 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { ProjectItem, ProjectTask, DayData } from "../../lib/supabase";
-import AppLayout, { useAppLayout } from "../../components/AppLayout";
+import { useAppLayout } from "../../components/AppLayout";
 import { Plus, Kanban, Trash2, CheckCircle2, Circle, Edit2, Check, X } from "lucide-react";
-
-export default function ProyectosPage() {
-  return (
-    <AppLayout>
-      <ProyectosDashboard />
-    </AppLayout>
-  );
-}
 
 const COLOR_PRESETS = [
   { name: "purple", value: "#7c6fe0" },
@@ -22,7 +14,7 @@ const COLOR_PRESETS = [
   { name: "green", value: "#10b981" },
 ];
 
-function ProyectosDashboard() {
+export default function ProyectosPage() {
   const { dayData, updateDayData, triggerToast } = useAppLayout();
 
   const [projects, setProjects] = useState<ProjectItem[]>([]);
