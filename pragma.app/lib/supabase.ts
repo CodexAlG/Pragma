@@ -21,6 +21,26 @@ export interface VaultItem {
   status?: "pending" | "completed";
 }
 
+export interface ProjectTask {
+  id: string;
+  title: string;
+  status: "todo" | "done";
+}
+
+export interface ProjectItem {
+  id: string;
+  name: string;
+  color: string;
+  tasks: ProjectTask[];
+  created_at: string;
+}
+
+export interface HistoryItem {
+  date: string;
+  timeline: TimelineItem[];
+  effort_distribution: { dev: number; meeting: number; idea: number };
+}
+
 export interface DayData {
   current_day?: {
     date: string;
@@ -30,6 +50,8 @@ export interface DayData {
     timeline: TimelineItem[];
   };
   vault?: VaultItem[];
+  projects?: ProjectItem[];
+  history?: HistoryItem[];
 }
 
 export interface ProfileData {
