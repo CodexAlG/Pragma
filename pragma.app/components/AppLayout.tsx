@@ -432,9 +432,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             onClick={() => setDrawerOpen(false)}
           />
 
-          <div className="absolute inset-y-0 right-0 pl-10 max-w-full flex">
+          <div className="absolute inset-y-0 right-0 max-w-full flex">
             <div
-              className={`w-screen max-w-md bg-[#111827] border-l border-white/5 shadow-2xl flex flex-col h-full transform transition-transform duration-300 ease-in-out ${
+              className={`w-[85vw] sm:w-[400px] bg-[#111827] border-l border-white/5 shadow-2xl flex flex-col h-full transform transition-transform duration-300 ease-in-out ${
                 drawerOpen ? "translate-x-0" : "translate-x-full"
               }`}
             >

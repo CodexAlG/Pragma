@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TimelineItem, DayData } from "../../lib/supabase";
 import { useAppLayout } from "../../components/AppLayout";
-import { Play, Pause, RotateCcw, CheckCircle, Target, ArrowLeft } from "lucide-react";
+import { Play, Pause, RotateCcw, CheckCircle, Target } from "lucide-react";
 
 export default function EnfoquePage() {
   const router = useRouter();
@@ -144,16 +144,6 @@ export default function EnfoquePage() {
 
   return (
     <div className="flex-1 p-4 md:p-8 space-y-8 flex flex-col justify-center max-w-2xl mx-auto w-full pb-24 md:pb-8">
-      {/* Return to Hoy */}
-      <div className="flex items-center">
-        <button
-          onClick={() => router.push("/hoy")}
-          className="flex items-center gap-2 text-xs font-semibold text-text-secondary hover:text-white transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Volver a hoy</span>
-        </button>
-      </div>
 
       {/* Task Selector Card */}
       <div className="bg-[#111827] border border-white/5 rounded-xl p-5 md:p-6 shadow-xl space-y-4 select-none">
