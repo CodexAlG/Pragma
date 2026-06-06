@@ -179,11 +179,36 @@ async function sendPush(
 }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
-function getEventStart(date: string, time: string): Date {
-  const [h, m] = time.split(" - ")[0].trim().split(":").map(Number);
-  const d = new Date(`${date}T00:00:00`);
-  d.setHours(h, m || 0, 0, 0);
-  return d;
+function getEventStart(date: string, time: string, timezone: string): Date {
+  const t = time.split(" - ")[0].trim();
+  const [h, m] = t.split(":").map(Number);
+  const dateStr = `${date}T${String(h).padStart(2, "0")}:${String(m || 0).padStart(2, "0")}:00`;
+
+  // Prefer using the browser's local wall-clock time for legacy entries.
+  const localDate = new Date(dateStr);
+  if (Number.isNaN(localDate.getTime())) return new Date(NaN);
+
+  // The server runs in UTC, so we convert the local wall-clock value back to UTC
+  // using a timezone-aware offset. This keeps older stored events aligned.
+  try {
+    const tzOffset = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      timeZoneName: "shortOffset",
+    }).formatToParts(localDate);
+    const offsetPart = tzOffset.find((part) => part.type === "timeZoneName")?.value ?? "GMT+0";
+    const match = offsetPart.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/i);
+    if (match) {
+      const sign = match[1] === "-" ? -1 : 1;
+      const hours = Number(match[2] || 0);
+      const minutes = Number(match[3] || 0);
+      const offsetMs = sign * (hours * 60 + minutes) * 60000;
+      return new Date(localDate.getTime() - offsetMs);
+    }
+  } catch {
+    // Fallback below
+  }
+
+  return localDate;
 }
 
 function dynamicLabel(title: string, time: string, start: Date, now: Date): string {
@@ -248,6 +273,7 @@ Deno.serve(async (req) => {
 
     const dd = profile.day_data;
     const readIds: string[] = dd.read_notifications ?? [];
+    const timezone = dd.current_day?.timezone || "UTC";
     const today = now.toISOString().split("T")[0];
 
     const events = [
@@ -256,11 +282,13 @@ Deno.serve(async (req) => {
     ];
 
     console.log(`[push] 📅 Eventos totales para ${sub.user_id}: ${events.length}`);
+    console.log(`[push] 🕐 Now: ${now.toISOString()}`);
+    console.log(`[push] 📋 Events sample:`, JSON.stringify(events.slice(0, 2)));
 
     for (const ev of events) {
       if (!ev.time) continue;
-      const start = getEventStart(ev.date, ev.time);
-      if (isNaN(start.getTime())) continue;
+      const start = ev.utc_time ? new Date(ev.utc_time) : getEventStart(ev.date, ev.time, timezone);
+      if (Number.isNaN(start.getTime())) continue;
 
       const triggers = [
         { type: "3d", ms: 3 * 86400000 },
@@ -272,8 +300,11 @@ Deno.serve(async (req) => {
         const trigTime = start.getTime() - tr.ms;
         const id = `${ev.id}-${tr.type}`;
         const justFired = trigTime >= now.getTime() - win5 && trigTime <= now.getTime();
+        const alreadyRead = readIds.includes(id);
 
-        if (justFired && !readIds.includes(id)) {
+        console.log(`[push] checking ${ev.title} trigger ${tr.type}: trigTime=${new Date(trigTime).toISOString()} justFired=${justFired} alreadyRead=${alreadyRead}`);
+
+        if (justFired && !alreadyRead) {
           const label = dynamicLabel(ev.title, ev.time, start, now);
           console.log(`[push] 🔔 Enviando: "${label}" → ${sub.endpoint.slice(0, 60)}...`);
 

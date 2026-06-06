@@ -8,6 +8,7 @@ export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 export interface TimelineItem {
   id: string;
   time: string;
+  utc_time?: string;
   title: string;
   type: "dev" | "meeting" | "client" | "bug" | "idea" | "personal" | "learning";
   status: "done" | "active" | "pending";
@@ -44,6 +45,7 @@ export interface HistoryItem {
 export interface DayData {
   current_day?: {
     date: string;
+    timezone?: string;
     raw_text: string;
     flags: string[];
     context_answers: Record<string, any>;

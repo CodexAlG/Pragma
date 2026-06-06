@@ -44,6 +44,7 @@ export default function HoyPage() {
   const [effortDist, setEffortDist] = useState({ dev: 0, meeting: 0, idea: 0 });
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
   // Inline editing state
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -98,7 +99,8 @@ export default function HoyPage() {
     const dayDataPayload: DayData = {
       ...dayData,
       current_day: {
-        ...(dayData?.current_day || { date: todayStr, raw_text: "", flags: [], context_answers: {}, timeline: [] }),
+        ...(dayData?.current_day || { date: todayStr, timezone, raw_text: "", flags: [], context_answers: {}, timeline: [] }),
+        timezone: dayData?.current_day?.timezone || timezone,
         timeline: updatedTimeline,
       },
       history: updatedHistory,
@@ -133,7 +135,8 @@ export default function HoyPage() {
     const dayDataPayload: DayData = {
       ...dayData,
       current_day: {
-        ...(dayData?.current_day || { date: todayStr, raw_text: "", flags: [], context_answers: {}, timeline: [] }),
+        ...(dayData?.current_day || { date: todayStr, timezone, raw_text: "", flags: [], context_answers: {}, timeline: [] }),
+        timezone: dayData?.current_day?.timezone || timezone,
         timeline: updated,
       },
       history: updatedHistory,
@@ -153,6 +156,7 @@ export default function HoyPage() {
 
     const todayStr = new Date().toISOString().split("T")[0];
     const currentDayDate = dayData.current_day?.date || "";
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
     if (currentDayDate && currentDayDate !== todayStr) {
       // Rollover to new day!
@@ -176,6 +180,7 @@ export default function HoyPage() {
         // 3. Construct new current_day
         const newCurrentDay = {
           date: todayStr,
+          timezone,
           raw_text: "",
           flags: [],
           context_answers: {},
@@ -300,9 +305,11 @@ export default function HoyPage() {
     agendarLines.forEach(line => {
       const parsedEvent = parseAgendarLine(line);
       if (parsedEvent) {
+        const localStart = new Date(`${parsedEvent.date}T${parsedEvent.time.split(" - ")[0].trim()}:00`);
         const newEventItem: TimelineItem = {
           id: `agendar-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           time: parsedEvent.time,
+          utc_time: isNaN(localStart.getTime()) ? undefined : localStart.toISOString(),
           title: parsedEvent.title,
           type: detectCategoryFromText(parsedEvent.title),
           status: "pending"
@@ -354,6 +361,7 @@ export default function HoyPage() {
       ...dayData,
       current_day: {
         date: new Date().toISOString().split("T")[0],
+        timezone,
         raw_text: "",
         flags: [],
         context_answers: {},
@@ -404,9 +412,11 @@ export default function HoyPage() {
 
     const formattedTimeRange = `${startTime} - ${endTime}`;
 
+    const localStart = new Date(`${schedDate}T${startTime}:00`);
     const newEventItem: TimelineItem = {
       id: `agendar-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       time: formattedTimeRange,
+      utc_time: isNaN(localStart.getTime()) ? undefined : localStart.toISOString(),
       title: schedTitle.trim(),
       type: schedType,
       status: "pending"
@@ -450,8 +460,9 @@ export default function HoyPage() {
 
     if (schedDate === todayStr) {
       dayDataPayload.current_day = {
-        ...(dayData?.current_day || { date: todayStr, raw_text: "", flags: [], context_answers: {}, timeline: [] }),
+        ...(dayData?.current_day || { date: todayStr, timezone, raw_text: "", flags: [], context_answers: {}, timeline: [] }),
         date: todayStr,
+        timezone: dayData?.current_day?.timezone || timezone,
         raw_text: rawText,
         flags,
         context_answers: contextAnswers,
@@ -487,6 +498,7 @@ export default function HoyPage() {
       ...dayData,
       current_day: {
         date: new Date().toISOString().split("T")[0],
+        timezone,
         raw_text: rawText,
         flags,
         context_answers: contextAnswers,
