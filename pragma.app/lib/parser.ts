@@ -263,9 +263,9 @@ export function autoTagIdea(text: string): string {
 }
 
 /**
- * Parses a line starting with "Agendar:" to extract date, time, and title
+ * Parses a line starting with "Agendar:" to extract date, time, title, and optional category
  */
-export function parseAgendarLine(line: string): { date: string; time: string; title: string } | null {
+export function parseAgendarLine(line: string): { date: string; time: string; title: string; type?: TimelineItem["type"] } | null {
   const match = line.match(/^agendar:\s*(.*)/i);
   if (!match) return null;
 
@@ -275,6 +275,37 @@ export function parseAgendarLine(line: string): { date: string; time: string; ti
 
   const dateTimePart = content.substring(0, commaIndex).trim();
   const titlePart = content.substring(commaIndex + 1).trim();
+
+  // Split titlePart by comma to check for category suffix
+  const titleSubparts = titlePart.split(",").map(p => p.trim());
+  let detectedType: TimelineItem["type"] | undefined = undefined;
+  let finalTitle = titlePart;
+
+  if (titleSubparts.length > 1) {
+    const potentialCategory = titleSubparts[titleSubparts.length - 1].toLowerCase();
+    
+    // Check if the potential category matches any known type
+    const categoryMap: Record<string, TimelineItem["type"]> = {
+      personal: "personal",
+      reunion: "meeting",
+      reunión: "meeting",
+      meeting: "meeting",
+      desarrollo: "dev",
+      dev: "dev",
+      bug: "bug",
+      fix: "bug",
+      error: "bug",
+      cliente: "client",
+      client: "client",
+      idea: "idea",
+    };
+
+    if (categoryMap[potentialCategory]) {
+      detectedType = categoryMap[potentialCategory];
+      // Re-join all parts except the last one as the clean title
+      finalTitle = titleSubparts.slice(0, -1).join(", ").trim();
+    }
+  }
 
   // Spanish months mapping
   const months: Record<string, number> = {
@@ -385,7 +416,8 @@ export function parseAgendarLine(line: string): { date: string; time: string; ti
   return {
     date: dateKey,
     time: formattedTimeRange,
-    title: titlePart,
+    title: finalTitle,
+    type: detectedType,
   };
 }
 

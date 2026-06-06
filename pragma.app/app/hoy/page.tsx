@@ -11,6 +11,8 @@ import {
   Circle,
   HelpCircle,
   Lightbulb,
+  Calendar,
+  X,
 } from "lucide-react";
 
 export default function HoyPage() {
@@ -26,6 +28,14 @@ export default function HoyPage() {
     bug_duration: "",
     save_to_vault: false,
   });
+
+  // Visual Schedule Modal State
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [schedDate, setSchedDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [schedTitle, setSchedTitle] = useState("");
+  const [schedType, setSchedType] = useState<TimelineItem["type"]>("meeting");
+  const [schedStart, setSchedStart] = useState("09:00");
+  const [schedEnd, setSchedEnd] = useState("10:00");
 
   // Timeline state
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
@@ -63,11 +73,23 @@ export default function HoyPage() {
     }
   }, [rawText]);
 
-  // Parse flags on text change
+  // Parse flags on text change and trigger modal on "agendar:"
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const text = e.target.value;
     setRawText(text);
-    setFlags(detectFlags(text));
+
+    // Strip "Agendar:" lines for flags auto-detection
+    const activeLines = text.split("\n").filter(line => !line.trim().toLowerCase().startsWith("agendar:"));
+    const activeText = activeLines.join("\n");
+    setFlags(detectFlags(activeText));
+
+    // Trigger modal if they type "agendar:"
+    if (text.toLowerCase().includes("agendar:")) {
+      setIsScheduleModalOpen(true);
+      // Remove "agendar:" (case-insensitive) to keep text area clean
+      const cleanedText = text.replace(/agendar:/i, "");
+      setRawText(cleanedText);
+    }
   };
 
   // Orquestar mi día submission
@@ -201,6 +223,97 @@ export default function HoyPage() {
     }
   };
 
+  const categories: { value: TimelineItem["type"]; label: string; color: string }[] = [
+    { value: "meeting", label: "Reunión", color: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+    { value: "dev", label: "Desarrollo", color: "bg-[#7c6fe0]/10 text-[#7c6fe0] border-[#7c6fe0]/20" },
+    { value: "bug", label: "Bug", color: "bg-red-500/10 text-red-400 border-red-500/20" },
+    { value: "client", label: "Cliente", color: "bg-[#2dd4a0]/10 text-[#2dd4a0] border-[#2dd4a0]/20" },
+    { value: "idea", label: "Idea", color: "bg-[#d4a06a]/10 text-[#d4a06a] border-[#d4a06a]/20" },
+    { value: "personal", label: "Personal", color: "bg-pink-500/10 text-pink-400 border-pink-500/20" },
+  ];
+
+  const handleSaveModalSchedule = async () => {
+    if (!schedTitle.trim()) {
+      triggerToast("Por favor ingresa una descripción para el evento.");
+      return;
+    }
+
+    let startTime = schedStart || "00:00";
+    let endTime = schedEnd || "";
+
+    if (!endTime || endTime === startTime) {
+      const [h, m] = startTime.split(":").map(Number);
+      const endH = (h + 1) % 24;
+      endTime = `${endH.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+    }
+
+    const formattedTimeRange = `${startTime} - ${endTime}`;
+
+    const newEventItem: TimelineItem = {
+      id: `agendar-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      time: formattedTimeRange,
+      title: schedTitle.trim(),
+      type: schedType,
+      status: "pending"
+    };
+
+    let updatedHistory = [...(dayData?.history || [])];
+    const existingDayIndex = updatedHistory.findIndex(h => h.date === schedDate);
+    if (existingDayIndex !== -1) {
+      const dayLog = updatedHistory[existingDayIndex];
+      const updatedTimeline = [...dayLog.timeline, newEventItem];
+      updatedTimeline.sort((a, b) => a.time.localeCompare(b.time));
+      updatedHistory[existingDayIndex] = {
+        ...dayLog,
+        timeline: updatedTimeline,
+        effort_distribution: calculateEffort(updatedTimeline)
+      };
+    } else {
+      const newTimeline = [newEventItem];
+      updatedHistory.push({
+        date: schedDate,
+        timeline: newTimeline,
+        effort_distribution: calculateEffort(newTimeline)
+      });
+    }
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    let updatedTodayTimeline = [...timeline];
+    if (schedDate === todayStr) {
+      const existsInToday = updatedTodayTimeline.some(t => t.title.toLowerCase() === newEventItem.title.toLowerCase() && t.time === newEventItem.time);
+      if (!existsInToday) {
+        updatedTodayTimeline.push(newEventItem);
+        updatedTodayTimeline.sort((a, b) => a.time.localeCompare(b.time));
+        setTimeline(updatedTodayTimeline);
+      }
+    }
+
+    const dayDataPayload: DayData = {
+      ...(dayData || {}),
+      history: updatedHistory,
+    };
+
+    if (schedDate === todayStr) {
+      dayDataPayload.current_day = {
+        ...(dayData?.current_day || { date: todayStr, raw_text: "", flags: [], context_answers: {}, timeline: [] }),
+        date: todayStr,
+        raw_text: rawText,
+        flags,
+        context_answers: contextAnswers,
+        timeline: updatedTodayTimeline,
+      };
+    }
+
+    const success = await updateDayData(dayDataPayload);
+    if (success) {
+      triggerToast("Evento agendado correctamente.");
+      setIsScheduleModalOpen(false);
+      setSchedTitle("");
+    } else {
+      triggerToast("Error al guardar en el servidor.");
+    }
+  };
+
   // Toggle single timeline item status
   const handleToggleTimelineItem = async (itemId: string) => {
     const updated = timeline.map(item => {
@@ -229,11 +342,15 @@ export default function HoyPage() {
     await updateDayData(dayDataPayload);
   };
 
-  // Setup resolution logic flags
-  const showDevQuestion = flags.includes("dev") || rawText.toLowerCase().includes("código") || rawText.toLowerCase().includes("codigo");
-  const showMeetingQuestion = flags.includes("meeting") || rawText.toLowerCase().includes("reunión") || rawText.toLowerCase().includes("meeting");
-  const showBugQuestion = rawText.toLowerCase().includes("bug") || rawText.toLowerCase().includes("fix");
-  const showIdeaQuestion = flags.includes("idea") || rawText.toLowerCase().includes("idea");
+  // Setup resolution logic flags (ignoring Agendar lines)
+  const activeText = rawText.split("\n")
+    .filter(line => !line.trim().toLowerCase().startsWith("agendar:"))
+    .join("\n");
+
+  const showDevQuestion = flags.includes("dev") || activeText.toLowerCase().includes("código") || activeText.toLowerCase().includes("codigo");
+  const showMeetingQuestion = flags.includes("meeting") || activeText.toLowerCase().includes("reunión") || activeText.toLowerCase().includes("meeting");
+  const showBugQuestion = activeText.toLowerCase().includes("bug") || activeText.toLowerCase().includes("fix");
+  const showIdeaQuestion = flags.includes("idea") || activeText.toLowerCase().includes("idea");
 
   // Calculate Progress values
   const totalTasks = timeline.filter(t => t.type !== "idea");
@@ -617,6 +734,122 @@ export default function HoyPage() {
             )}
           </div>
         </section>
+      )}
+
+      {/* VISUAL SCHEDULING CALENDAR MODAL */}
+      {isScheduleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs select-none">
+          {/* Backdrop overlay */}
+          <div
+            className="fixed inset-0 bg-transparent"
+            onClick={() => setIsScheduleModalOpen(false)}
+          />
+
+          {/* Modal Container Card */}
+          <div className="relative bg-[#111827] border border-white/5 rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden z-10 animate-fade-in">
+            {/* Header */}
+            <div className="h-16 px-6 border-b border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Calendar className="h-4.5 w-4.5 text-[#7c6fe0]" />
+                <span className="text-sm font-semibold text-white">Agendar Evento / Nota</span>
+              </div>
+              <button
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="text-text-secondary hover:text-white cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Fields */}
+            <div className="p-6 space-y-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] text-text-secondary font-bold uppercase tracking-wider">Descripción del Evento</label>
+                <input
+                  type="text"
+                  placeholder="ej. Cumpleaños abuelita"
+                  value={schedTitle}
+                  onChange={(e) => setSchedTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSaveModalSchedule()}
+                  className="w-full bg-[#0a0e1a] border border-white/5 focus:border-[#7c6fe0]/40 rounded-lg px-3.5 py-2.5 text-xs text-text-primary focus:outline-hidden transition-all placeholder-text-hint"
+                />
+              </div>
+              
+              {/* Date picker */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] text-text-secondary font-bold uppercase tracking-wider">Fecha</label>
+                <input
+                  type="date"
+                  value={schedDate}
+                  onChange={(e) => setSchedDate(e.target.value)}
+                  className="w-full bg-[#0a0e1a] border border-white/5 focus:border-[#7c6fe0]/40 rounded-lg px-3.5 py-2.5 text-xs text-text-primary focus:outline-hidden transition-all"
+                />
+              </div>
+
+              {/* Time and Category Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] text-text-secondary font-bold uppercase tracking-wider">Inicio</label>
+                  <input
+                    type="time"
+                    value={schedStart}
+                    onChange={(e) => setSchedStart(e.target.value)}
+                    className="w-full bg-[#0a0e1a] border border-white/5 focus:border-[#7c6fe0]/40 rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-hidden text-center"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] text-text-secondary font-bold uppercase tracking-wider">Fin</label>
+                  <input
+                    type="time"
+                    value={schedEnd}
+                    onChange={(e) => setSchedEnd(e.target.value)}
+                    className="w-full bg-[#0a0e1a] border border-white/5 focus:border-[#7c6fe0]/40 rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-hidden text-center"
+                  />
+                </div>
+              </div>
+
+              {/* Category chips selector */}
+              <div className="flex flex-col gap-2 pt-2">
+                <label className="text-[10px] text-text-secondary font-bold uppercase tracking-wider">Categoría</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {categories.map((cat) => {
+                    const isSelected = schedType === cat.value;
+                    return (
+                      <button
+                        key={cat.value}
+                        type="button"
+                        onClick={() => setSchedType(cat.value)}
+                        className={`px-2 py-2.5 rounded-lg border text-[10px] font-semibold transition-all cursor-pointer text-center ${
+                          isSelected
+                            ? `${cat.color} border-white/20 ring-1 ring-[#7c6fe0]`
+                            : "bg-white/[0.02] border-white/5 text-text-secondary hover:text-white hover:bg-white/5"
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="p-4 bg-[#1a2236]/30 border-t border-white/5 flex gap-3">
+              <button
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="flex-1 py-2.5 bg-[#1a2236] hover:bg-[#252f4a] border border-white/5 text-text-secondary hover:text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveModalSchedule}
+                className="flex-1 py-2.5 bg-[#7c6fe0] hover:bg-[#685ad8] text-white text-xs font-semibold rounded-lg shadow-md transition-colors cursor-pointer"
+              >
+                Agendar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
