@@ -11,7 +11,7 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#7c6fe0",
     icons: [
       {
-        src: "/origami_p_icon.png",
+        src: "/origami_p_icon(1).png",
         sizes: "any",
         type: "image/png",
       },

@@ -5,7 +5,6 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { pragmaDb, VaultItem, DayData, PragmaUser } from "../lib/supabase";
 import { autoTagIdea } from "../lib/parser";
-import { usePushSubscription } from "../lib/usePushSubscription";
 import {
   Calendar,
   Target,
@@ -295,9 +294,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   const activeNotifications = getNotifications();
-
-  usePushSubscription(user?.id ?? null);
-
 
   // Monitor and fire browser notifications when app is active
   const lastCheckRef = useRef<number>(Date.now());
