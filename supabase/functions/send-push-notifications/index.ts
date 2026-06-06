@@ -1,170 +1,26 @@
 // supabase/functions/send-push-notifications/index.ts
-// Web Push con Web Crypto API nativa — sin dependencias externas
+// Ntfy notifications via Supabase Edge Function
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
-const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
-const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@pragma.app";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+const NTFY_TOPIC = Deno.env.get("NTFY_TOPIC") ?? "pragma-notifications";
 
-// ── Helpers base64url ─────────────────────────────────────────────────────────
-const b64 = {
-  encode: (buf: Uint8Array) =>
-    btoa(String.fromCharCode(...buf)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, ""),
-  decode: (s: string) => {
-    s = s.replace(/-/g, "+").replace(/_/g, "/");
-    while (s.length % 4) s += "=";
-    return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-  },
-};
-
-const enc = new TextEncoder();
-
-// ── VAPID JWT ─────────────────────────────────────────────────────────────────
-async function vapidJWT(audience: string): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const header = b64.encode(enc.encode(JSON.stringify({ typ: "JWT", alg: "ES256" })));
-  const payload = b64.encode(enc.encode(JSON.stringify({ aud: audience, exp: now + 43200, sub: VAPID_SUBJECT })));
-  const data = `${header}.${payload}`;
-
-  const pubKeyBytes = b64.decode(VAPID_PUBLIC_KEY);
-  if (pubKeyBytes.length !== 65 || pubKeyBytes[0] !== 0x04) {
-    throw new Error("Invalid VAPID public key format");
-  }
-
-  const jwk = {
-    kty: "EC",
-    crv: "P-256",
-    d: VAPID_PRIVATE_KEY,
-    x: b64.encode(pubKeyBytes.slice(1, 33)),
-    y: b64.encode(pubKeyBytes.slice(33, 65)),
-    key_ops: ["sign"],
-    ext: true,
-  } as JsonWebKey;
-
-  const key = await crypto.subtle.importKey(
-    "jwk",
-    jwk,
-    { name: "ECDSA", namedCurve: "P-256" },
-    true,
-    ["sign"]
-  );
-
-  const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, enc.encode(data));
-  return `${data}.${b64.encode(new Uint8Array(sig))}`;
-}
-
-// ── AES-128-GCM Web Push Encryption (RFC 8188 / aes128gcm) ───────────────────
-async function encryptPayload(
-  sub: { keys: { p256dh: string; auth: string } },
-  payload: string
-): Promise<{ ciphertext: ArrayBuffer; salt: Uint8Array; serverPublicKey: Uint8Array }> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const authSecret = b64.decode(sub.keys.auth);
-  const recipientPublicKey = b64.decode(sub.keys.p256dh);
-
-  const serverKeyPair = await crypto.subtle.generateKey(
-    { name: "ECDH", namedCurve: "P-256" },
-    true,
-    ["deriveBits"]
-  );
-
-  const serverPublicKeyRaw = new Uint8Array(
-    await crypto.subtle.exportKey("raw", serverKeyPair.publicKey)
-  );
-
-  const recipientKey = await crypto.subtle.importKey(
-    "raw", recipientPublicKey, { name: "ECDH", namedCurve: "P-256" }, false, []
-  );
-
-  const sharedSecret = await crypto.subtle.deriveBits(
-    { name: "ECDH", public: recipientKey }, serverKeyPair.privateKey, 256
-  );
-
-  // PRK via HKDF-SHA256 with auth
-  const prkKey = await crypto.subtle.importKey("raw", new Uint8Array(sharedSecret), "HKDF", false, ["deriveBits"]);
-  const prk = await crypto.subtle.deriveBits(
-    { name: "HKDF", hash: "SHA-256", salt: authSecret, info: enc.encode("WebPush: info\x00") },
-    prkKey, 256
-  );
-
-  // Derive content encryption key (16 bytes) and nonce (12 bytes)
-  const contentKey = new Uint8Array(await crypto.subtle.deriveBits(
-    { name: "HKDF", hash: "SHA-256", salt, info: enc.encode("Content-Encoding: aes128gcm\x00") },
-    await crypto.subtle.importKey("raw", prk, "HKDF", false, ["deriveBits"]), 128
-  ));
-  const nonce = new Uint8Array(await crypto.subtle.deriveBits(
-    { name: "HKDF", hash: "SHA-256", salt, info: enc.encode("Content-Encoding: nonce\x00") },
-    await crypto.subtle.importKey("raw", prk, "HKDF", false, ["deriveBits"]), 96
-  ));
-
-  const aesKey = await crypto.subtle.importKey("raw", contentKey, "AES-GCM", false, ["encrypt"]);
-  const payloadBytes = enc.encode(payload);
-
-  // Padding: 1 byte delimiter (0x02) + payload
-  const padded = new Uint8Array(payloadBytes.length + 1);
-  padded[0] = 0x02;
-  padded.set(payloadBytes, 1);
-
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, padded);
-
-  return { ciphertext, salt, serverPublicKey: serverPublicKeyRaw };
-}
-
-// ── Send one push notification ────────────────────────────────────────────────
-async function sendPush(
-  subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
-  payload: object
-): Promise<{ ok: boolean; status?: number; error?: string }> {
-  const endpoint = subscription.endpoint;
-  const { protocol, host } = new URL(endpoint);
-  const jwt = await vapidJWT(`${protocol}//${host}`);
-
-  const payloadStr = JSON.stringify(payload);
-
-  let body: ArrayBuffer;
-  let contentType: string;
-  let contentEncoding: string;
-
+async function sendNtfy(title: string, body: string, tag: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const { ciphertext, salt, serverPublicKey } = await encryptPayload(subscription, payloadStr);
-
-    // aes128gcm record header: salt (16) + rs (4) + keyid_len (1) + keyid (65)
-    const rs = new Uint8Array(4);
-    new DataView(rs.buffer).setUint32(0, 4096, false);
-    const header = new Uint8Array(16 + 4 + 1 + serverPublicKey.length);
-    header.set(salt, 0);
-    header.set(rs, 16);
-    header[20] = serverPublicKey.length;
-    header.set(serverPublicKey, 21);
-
-    const fullBody = new Uint8Array(header.length + ciphertext.byteLength);
-    fullBody.set(header, 0);
-    fullBody.set(new Uint8Array(ciphertext), header.length);
-
-    body = fullBody.buffer;
-    contentType = "application/octet-stream";
-    contentEncoding = "aes128gcm";
-  } catch (_) {
-    // Si la encriptación falla, enviar sin cifrar como fallback
-    body = enc.encode(payloadStr).buffer;
-    contentType = "text/plain;charset=UTF-8";
-    contentEncoding = "";
-  }
-
-  const headers: Record<string, string> = {
-    "Authorization": `vapid t=${jwt},k=${VAPID_PUBLIC_KEY}`,
-    "Content-Type": contentType,
-    "TTL": "86400",
-  };
-  if (contentEncoding) headers["Content-Encoding"] = contentEncoding;
-
-  try {
-    const res = await fetch(endpoint, { method: "POST", headers, body });
-    const text = await res.text().catch(() => "");
-    if (!res.ok) return { ok: false, status: res.status, error: text };
-    return { ok: true, status: res.status };
+    const res = await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+      method: "POST",
+      headers: {
+        "Title": title,
+        "Body": body,
+        "Tags": "calendar",
+        "Priority": "default",
+        "Content-Type": "text/plain",
+      },
+      body,
+    });
+    if (!res.ok) return { ok: false, error: await res.text() };
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
@@ -201,28 +57,28 @@ Deno.serve(async (req) => {
     });
   }
 
-  console.log("[push] 🚀 Iniciando revisión de notificaciones...");
+  console.log("[ntfy] 🚀 Iniciando revisión de notificaciones...");
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
 
-  const { data: subs, error: subErr } = await supabase
-    .from("push_subscriptions")
-    .select("user_id, endpoint, subscription");
+  const { data: profiles, error: profileErr } = await supabase
+    .from("profiles")
+    .select("id, day_data");
 
-  if (subErr) {
-    console.error("[push] ❌ Error leyendo suscripciones:", subErr.message);
-    return new Response(JSON.stringify({ error: subErr.message }), {
+  if (profileErr) {
+    console.error("[ntfy] ❌ Error leyendo perfiles:", profileErr.message);
+    return new Response(JSON.stringify({ error: profileErr.message }), {
       status: 500, headers: { "Content-Type": "application/json" },
     });
   }
 
-  console.log(`[push] 📋 Suscripciones encontradas: ${subs?.length ?? 0}`);
+  console.log(`[ntfy] 📋 Perfiles encontrados: ${profiles?.length ?? 0}`);
 
-  if (!subs?.length) {
-    return new Response(JSON.stringify({ sent: 0, message: "Sin suscripciones" }), {
+  if (!profiles?.length) {
+    return new Response(JSON.stringify({ sent: 0, message: "Sin perfiles" }), {
       headers: { "Content-Type": "application/json" },
     });
   }
@@ -232,13 +88,10 @@ Deno.serve(async (req) => {
   let sent = 0;
   const errors: string[] = [];
 
-  for (const sub of subs) {
-    const { data: profile } = await supabase
-      .from("profiles").select("day_data").eq("id", sub.user_id).single();
-
-    if (!profile?.day_data) { console.log(`[push] ⚠️ Sin day_data para ${sub.user_id}`); continue; }
-
+  for (const profile of profiles) {
     const dd = profile.day_data;
+    if (!dd) { console.log(`[ntfy] ⚠️ Sin day_data para ${profile.id}`); continue; }
+
     const readIds: string[] = dd.read_notifications ?? [];
     const today = now.toISOString().split("T")[0];
 
@@ -247,9 +100,9 @@ Deno.serve(async (req) => {
       ...(dd.current_day?.timeline ?? []).map((t: any) => ({ ...t, date: today })),
     ];
 
-    console.log(`[push] 📅 Eventos totales para ${sub.user_id}: ${events.length}`);
-    console.log(`[push] 🕐 Now: ${now.toISOString()}`);
-    console.log(`[push] 📋 Events sample:`, JSON.stringify(events.slice(0, 2)));
+    console.log(`[ntfy] 📅 Eventos totales para ${profile.id}: ${events.length}`);
+    console.log(`[ntfy] 🕐 Now: ${now.toISOString()}`);
+    console.log(`[ntfy] 📋 Events sample:`, JSON.stringify(events.slice(0, 2)));
 
     for (const ev of events) {
       if (!ev.time) continue;
@@ -268,33 +121,27 @@ Deno.serve(async (req) => {
         const justFired = trigTime >= now.getTime() - win5 && trigTime <= now.getTime();
         const alreadyRead = readIds.includes(id);
 
-        console.log(`[push] checking ${ev.title} trigger ${tr.type}: trigTime=${new Date(trigTime).toISOString()} justFired=${justFired} alreadyRead=${alreadyRead}`);
+        console.log(`[ntfy] checking ${ev.title} trigger ${tr.type}: trigTime=${new Date(trigTime).toISOString()} justFired=${justFired} alreadyRead=${alreadyRead}`);
 
         if (justFired && !alreadyRead) {
           const label = dynamicLabel(ev.title, ev.time, start, now);
-          console.log(`[push] 🔔 Enviando: "${label}" → ${sub.endpoint.slice(0, 60)}...`);
+          console.log(`[ntfy] 🔔 Enviando: "${label}" (tag=${id})`);
 
-          const result = await sendPush(sub.subscription, {
-            title: "📅 Pragma", body: label, tag: id, url: "/hoy",
-          });
+          const result = await sendNtfy("📅 Pragma", label, id);
 
           if (result.ok) {
             sent++;
-            console.log(`[push] ✅ Enviado OK (status ${result.status})`);
+            console.log("[ntfy] ✅ Enviado OK");
           } else {
             errors.push(`${ev.title}: ${result.error}`);
-            console.error(`[push] ❌ Error: status=${result.status} msg=${result.error}`);
-            if (result.status === 410 || result.status === 404) {
-              await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
-              console.log("[push] 🗑️ Suscripción expirada eliminada");
-            }
+            console.error(`[ntfy] ❌ Error: ${result.error}`);
           }
         }
       }
     }
   }
 
-  console.log(`[push] ✅ Finalizado. Enviadas: ${sent}, Errores: ${errors.length}`);
+  console.log(`[ntfy] ✅ Finalizado. Enviadas: ${sent}, Errores: ${errors.length}`);
 
   return new Response(
     JSON.stringify({ ok: true, sent, errors: errors.length ? errors : undefined, ts: now.toISOString() }),
