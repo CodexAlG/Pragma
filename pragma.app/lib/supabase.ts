@@ -29,6 +29,7 @@ export interface VaultItem {
   text: string;
   tag: string;
   created_at: string;
+  status?: "pending" | "completed";
 }
 
 export interface DayData {

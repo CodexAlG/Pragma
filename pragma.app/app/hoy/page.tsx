@@ -117,12 +117,15 @@ export default function HoyPage() {
 
     // Atomic vault save if checkbox checked
     let updatedVault = [...vault];
-    if (contextAnswers.save_to_vault && flags.includes("idea")) {
+    if (contextAnswers.save_to_vault) {
       // Find ideas sentences
       const sentences = rawText.split(/[.;\n]+/).map(s => s.trim());
-      const ideaSentences = sentences.filter(s =>
+      let ideaSentences = sentences.filter(s =>
         ["idea", "pensar en", "explorar"].some(k => s.toLowerCase().includes(k))
       );
+      if (ideaSentences.length === 0) {
+        ideaSentences = [rawText];
+      }
 
       ideaSentences.forEach((ideaText, i) => {
         // Clean text of "IDEA:" headers
@@ -136,6 +139,7 @@ export default function HoyPage() {
               text: cleanedText,
               tag: autoTagIdea(cleanedText),
               created_at: new Date().toISOString().split("T")[0],
+              status: "pending",
             });
           }
         }
@@ -206,6 +210,7 @@ export default function HoyPage() {
       text: newIdeaText.trim(),
       tag: autoTagIdea(newIdeaText),
       created_at: new Date().toISOString().split("T")[0],
+      status: "pending",
     };
 
     const updatedVault = [...vault, newIdea];
@@ -249,6 +254,33 @@ export default function HoyPage() {
     triggerToast("Idea eliminada de la bóveda.");
   };
 
+  // Toggle idea completion status in drawer
+  const handleToggleIdeaStatus = async (ideaId: string) => {
+    const updatedVault = vault.map(v => {
+      if (v.id === ideaId) {
+        return {
+          ...v,
+          status: v.status === "completed" ? ("pending" as const) : ("completed" as const),
+        };
+      }
+      return v;
+    });
+    setVault(updatedVault);
+
+    const dayDataPayload: DayData = {
+      current_day: timeline.length > 0 ? {
+        date: new Date().toISOString().split("T")[0],
+        raw_text: rawText,
+        flags,
+        context_answers: contextAnswers,
+        timeline,
+      } : undefined,
+      vault: updatedVault,
+    };
+
+    await pragmaDb.updateDayData(dayDataPayload);
+  };
+
   // Date formatted in Mono
   const getFormattedDate = () => {
     const d = new Date();
@@ -282,7 +314,7 @@ export default function HoyPage() {
   return (
     <div className="min-h-screen flex bg-[#0a0e1a] text-text-primary overflow-x-hidden font-sans">
       {/* SIDEBAR - Desktop (Fixed 220px) */}
-      <aside className="hidden md:flex flex-col w-[220px] bg-[#111827] border-r border-white/5 select-none shrink-0">
+      <aside className="hidden md:flex flex-col fixed left-0 top-0 h-screen w-[220px] bg-[#111827] border-r border-white/5 select-none shrink-0 z-30">
         <div className="flex flex-col flex-1 py-6">
           <nav className="space-y-1.5 px-4">
             <a
@@ -349,7 +381,7 @@ export default function HoyPage() {
       </aside>
 
       {/* MAIN CONTAINER */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 md:ml-[220px]">
         {/* TOPBAR */}
         <header className="h-16 border-b border-white/5 bg-[#111827] flex items-center justify-between px-6 select-none shrink-0 z-40">
           <div className="flex items-center gap-3">
@@ -612,27 +644,15 @@ export default function HoyPage() {
               </div>
             )}
 
-            {/* Orchestrate Button Grid */}
-            <div className="flex gap-4">
-              {showResults && (
-                <button
-                  onClick={handleOrchestrate}
-                  disabled={!rawText.trim()}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#111827] hover:bg-[#1a2236] border border-white/5 text-text-primary hover:border-white/12 font-semibold text-sm rounded-lg transition-all duration-150 cursor-pointer shadow-lg select-none"
-                >
-                  <Sparkles className="h-4.5 w-4.5 text-accent-purple animate-pulse" />
-                  <span>Re-orquestar</span>
-                </button>
-              )}
-              <button
-                onClick={handleOrchestrate}
-                disabled={!rawText.trim()}
-                className={`${showResults ? "flex-1" : "w-full"} flex items-center justify-center gap-2 py-3 bg-[#7c6fe0] hover:bg-[#6c5ecb] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-lg transition-all duration-150 cursor-pointer shadow-lg select-none`}
-              >
-                <Sparkles className="h-4.5 w-4.5" />
-                <span>Orquestar mi día</span>
-              </button>
-            </div>
+            {/* Orchestrate Button */}
+            <button
+              onClick={handleOrchestrate}
+              disabled={!rawText.trim()}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-[#7c6fe0] hover:bg-[#6c5ecb] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-lg transition-all duration-150 cursor-pointer shadow-lg select-none"
+            >
+              <Sparkles className="h-4.5 w-4.5" />
+              <span>{showResults ? "Re-orquestar" : "Orquestar mi día"}</span>
+            </button>
           </section>
 
           {/* SECTION INFERIOR — RESULTS */}
@@ -959,16 +979,44 @@ export default function HoyPage() {
                 vault.map((idea, idx) => (
                   <div
                     key={idea.id || idx}
-                    className="bg-[#1a2236] border border-white/5 rounded-lg p-4 flex flex-col gap-2 group relative hover:border-white/12 transition-all"
+                    className={`bg-[#1a2236] border border-white/5 rounded-lg p-4 flex flex-col gap-2 group relative hover:border-white/12 transition-all ${
+                      idea.status === "completed" ? "opacity-60" : ""
+                    }`}
                   >
-                    <div className="text-sm text-text-primary pr-6 leading-normal break-words">
-                      {idea.text}
+                    <div className="flex items-start gap-3">
+                      {/* Status Toggle Checkbox */}
+                      <button
+                        onClick={() => handleToggleIdeaStatus(idea.id)}
+                        title={idea.status === "completed" ? "Marcar como pendiente" : "Marcar como cumplida"}
+                        className="mt-0.5 shrink-0 text-text-secondary hover:text-[#2dd4a0] cursor-pointer transition-colors duration-150"
+                      >
+                        {idea.status === "completed" ? (
+                          <CheckCircle2 className="h-4.5 w-4.5 text-[#2dd4a0] fill-[#2dd4a0]/10" />
+                        ) : (
+                          <Circle className="h-4.5 w-4.5" />
+                        )}
+                      </button>
+
+                      <div
+                        className={`text-sm text-text-primary pr-6 leading-normal break-words ${
+                          idea.status === "completed" ? "line-through text-text-secondary decoration-white/10" : ""
+                        }`}
+                      >
+                        {idea.text}
+                      </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-[10px] text-text-secondary font-mono">
-                      <span className="px-1.5 py-0.5 bg-[#d4a06a]/10 border border-[#d4a06a]/20 text-[#d4a06a] rounded-sm">
-                        {idea.tag}
-                      </span>
+                    <div className="flex items-center justify-between text-[10px] text-text-secondary font-mono pl-7.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1.5 py-0.5 bg-[#d4a06a]/10 border border-[#d4a06a]/20 text-[#d4a06a] rounded-sm">
+                          {idea.tag}
+                        </span>
+                        {idea.status === "completed" && (
+                          <span className="text-[10px] text-[#2dd4a0] uppercase font-bold tracking-wider">
+                            Cumplida
+                          </span>
+                        )}
+                      </div>
                       <span>{idea.created_at}</span>
                     </div>
 
