@@ -25,6 +25,8 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null;
   try {
     const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    await registration.update();
+    await navigator.serviceWorker.ready;
     console.log('[WebPush] Service Worker registrado:', registration.scope);
     return registration;
   } catch (err) {
