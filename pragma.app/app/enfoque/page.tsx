@@ -275,6 +275,8 @@ export default function EnfoquePage() {
                     ? "bg-blue-500/10 text-blue-400"
                     : selectedTask.type === "client"
                     ? "bg-[#2dd4a0]/15 text-[#2dd4a0]"
+                    : selectedTask.type === "personal"
+                    ? "bg-pink-500/10 text-pink-400"
                     : "bg-[#d4a06a]/15 text-[#d4a06a]"
                 }`}
               >
@@ -286,6 +288,8 @@ export default function EnfoquePage() {
                   ? "Reunión"
                   : selectedTask.type === "client"
                   ? "Cliente"
+                  : selectedTask.type === "personal"
+                  ? "Personal"
                   : "Idea"}
               </span>
               {selectedTask.time && (

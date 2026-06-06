@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { pragmaDb, TimelineItem, VaultItem, DayData, HistoryItem } from "../../lib/supabase";
-import { detectFlags, parseBrainDump, calculateEffort, autoTagIdea, parseAgendarLine } from "../../lib/parser";
+import { detectFlags, parseBrainDump, calculateEffort, autoTagIdea, parseAgendarLine, detectCategoryFromText } from "../../lib/parser";
 import { useAppLayout } from "../../components/AppLayout";
 import {
   Sparkles,
@@ -134,7 +134,7 @@ export default function HoyPage() {
           id: `agendar-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           time: parsedEvent.time,
           title: parsedEvent.title,
-          type: "meeting", // Default to meeting for general agenda items
+          type: detectCategoryFromText(parsedEvent.title),
           status: "pending"
         };
 
@@ -271,8 +271,8 @@ export default function HoyPage() {
               </span>
             )}
             {flags.length === 0 && (
-              <span className="text-xs text-text-hint font-mono select-none py-1">
-                Escribe para auto-detectar tareas...
+              <span className="text-xs text-text-hint font-mono select-none py-1 leading-relaxed">
+                Palabras clave: <span className="text-text-secondary">reunión/sincro</span> (Gestión), <span className="text-text-secondary">código/pr</span> (Desarrollo), <span className="text-text-secondary">bug/fix</span> (Bugs), <span className="text-[#d4a06a]">idea</span> (Bóveda), <span className="text-pink-400">personal/casa</span> (Personal) o <span className="text-[#7c6fe0]">Agendar: 15 de junio, Cita</span>.
               </span>
             )}
           </div>
@@ -587,6 +587,8 @@ export default function HoyPage() {
                               ? "bg-blue-500/10 text-blue-400"
                               : item.type === "client"
                               ? "bg-[#2dd4a0]/10 text-[#2dd4a0]"
+                              : item.type === "personal"
+                              ? "bg-pink-500/10 text-pink-400"
                               : "bg-[#d4a06a]/10 text-[#d4a06a]"
                           }`}>
                             {item.type === "dev"
@@ -597,6 +599,8 @@ export default function HoyPage() {
                               ? "Reunión"
                               : item.type === "client"
                               ? "Cliente"
+                              : item.type === "personal"
+                              ? "Personal"
                               : "Idea"}
                           </span>
                           {isCompleted && (

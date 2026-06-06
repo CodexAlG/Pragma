@@ -6,6 +6,7 @@ const BUG_KEYWORDS = ["bug", "fix", "error", "fallo", "investigar", "resolución
 const MEETING_KEYWORDS = ["reunión", "reunion", "meeting", "standup", "sincro", "equipo", "practicantes"];
 const CLIENT_KEYWORDS = ["cliente", "acme", "externo", "llamada", "call"];
 const IDEA_KEYWORDS = ["idea", "pensar en", "explorar", "bóveda", "boveda"];
+const PERSONAL_KEYWORDS = ["personal", "cumpleaños", "cumple", "abuela", "abuelo", "mamá", "mama", "papá", "papa", "casa", "médico", "medico", "cita", "dental", "familia", "familiar", "boda", "fiesta", "vacaciones"];
 
 /**
  * Detects presence of flags for showing real-time chips
@@ -112,6 +113,9 @@ export function parseBrainDump(text: string, answers: Record<string, any> = {}):
     } else if (MEETING_KEYWORDS.some(k => lowercase.includes(k))) {
       type = "meeting";
       matched = true;
+    } else if (PERSONAL_KEYWORDS.some(k => lowercase.includes(k))) {
+      type = "personal";
+      matched = true;
     } else if (DEV_KEYWORDS.some(k => lowercase.includes(k))) {
       type = "dev";
       matched = true;
@@ -162,12 +166,14 @@ export function parseBrainDump(text: string, answers: Record<string, any> = {}):
   // 3. client
   // 4. bug
   // 5. idea
+  // 6. personal
   const typeOrder: Record<TimelineItem["type"], number> = {
     dev: 1,
     meeting: 2,
     client: 3,
     bug: 4,
     idea: 5,
+    personal: 6,
   };
 
   return items.sort((a, b) => {
@@ -198,6 +204,7 @@ export function calculateEffort(timeline: TimelineItem[]): { dev: number; meetin
     meeting: 1,
     client: 2,
     idea: 1,
+    personal: 1,
   };
 
   let devWeight = 0;
@@ -208,7 +215,7 @@ export function calculateEffort(timeline: TimelineItem[]): { dev: number; meetin
     const w = weights[item.type] || 1;
     if (item.type === "dev" || item.type === "bug") {
       devWeight += w;
-    } else if (item.type === "meeting" || item.type === "client") {
+    } else if (item.type === "meeting" || item.type === "client" || item.type === "personal") {
       meetingWeight += w;
     } else if (item.type === "idea") {
       ideaWeight += w;
@@ -380,4 +387,17 @@ export function parseAgendarLine(line: string): { date: string; time: string; ti
     time: formattedTimeRange,
     title: titlePart,
   };
+}
+
+/**
+ * Detects the category of an event title based on keywords
+ */
+export function detectCategoryFromText(text: string): TimelineItem["type"] {
+  const lowercase = text.toLowerCase();
+  if (BUG_KEYWORDS.some(k => lowercase.includes(k))) return "bug";
+  if (CLIENT_KEYWORDS.some(k => lowercase.includes(k))) return "client";
+  if (MEETING_KEYWORDS.some(k => lowercase.includes(k))) return "meeting";
+  if (DEV_KEYWORDS.some(k => lowercase.includes(k))) return "dev";
+  if (IDEA_KEYWORDS.some(k => lowercase.includes(k))) return "idea";
+  return "personal";
 }

@@ -532,9 +532,11 @@ export default function HistorialPage() {
                                   ? "bg-blue-500/10 text-blue-400"
                                   : item.type === "client"
                                   ? "bg-[#2dd4a0]/10 text-[#2dd4a0]"
+                                  : item.type === "personal"
+                                  ? "bg-pink-500/10 text-pink-400"
                                   : "bg-[#d4a06a]/10 text-[#d4a06a]"
                               }`}>
-                                {item.type}
+                                {item.type === "personal" ? "Personal" : item.type}
                               </span>
                             </div>
 
@@ -606,6 +608,8 @@ export default function HistorialPage() {
                                           ? "bg-blue-400"
                                           : item.type === "client"
                                           ? "bg-[#2dd4a0]"
+                                          : item.type === "personal"
+                                          ? "bg-pink-400"
                                           : "bg-[#d4a06a]"
                                       }`} />
                                       <span className="font-mono text-[9px] text-text-secondary shrink-0">
@@ -699,7 +703,7 @@ export default function HistorialPage() {
                       <option value="bug">Bug</option>
                       <option value="client">Cliente</option>
                       <option value="idea">Idea</option>
-                      <option value="Personal">Personal</option>
+                      <option value="personal">Personal</option>
                     </select>
                   </div>
                 </div>
