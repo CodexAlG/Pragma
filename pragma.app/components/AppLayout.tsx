@@ -11,7 +11,6 @@ import {
   Kanban,
   Lightbulb,
   History,
-  Menu,
   X,
   LogOut,
   CheckCircle2,
@@ -52,7 +51,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // UI state
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [newIdeaText, setNewIdeaText] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
@@ -282,14 +280,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* TOPBAR */}
           <header className="h-16 border-b border-white/5 bg-[#111827] flex items-center justify-between px-6 select-none shrink-0 z-40">
             <div className="flex items-center gap-3">
-              {/* Mobile Menu Icon */}
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="md:hidden text-text-secondary hover:text-white mr-1 cursor-pointer"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
-
               {/* Pulsing logo */}
               <div className="flex items-center gap-2">
                 <span className="relative flex h-2 w-2">
@@ -316,91 +306,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <LogOut className="h-3.5 w-3.5" />
             </button>
           </header>
-
-          {/* MOBILE NAVIGATION SIDEBAR MENU */}
-          {mobileMenuOpen && (
-            <div className="md:hidden fixed inset-0 z-50 flex">
-              {/* Overlay */}
-              <div
-                className="fixed inset-0 bg-black/60 backdrop-blur-xs"
-                onClick={() => setMobileMenuOpen(false)}
-              />
-              {/* Sidebar drawer content */}
-              <div className="relative flex flex-col w-[240px] bg-[#111827] h-full p-6 border-r border-white/5">
-                <div className="flex items-center justify-between mb-8">
-                  <span className="font-bold text-white">Navegación</span>
-                  <button
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="text-text-secondary hover:text-white"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-                <nav className="space-y-4">
-                  <Link
-                    href="/hoy"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 ${
-                      pathname === "/hoy" ? "text-[#7c6fe0] font-semibold" : "text-text-secondary hover:text-white"
-                    }`}
-                  >
-                    <Calendar className="h-4.5 w-4.5" />
-                    <span className="text-sm font-medium">Hoy</span>
-                  </Link>
-                  <Link
-                    href="/enfoque"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 ${
-                      pathname === "/enfoque" ? "text-[#7c6fe0] font-semibold" : "text-text-secondary hover:text-white"
-                    }`}
-                  >
-                    <Target className="h-4.5 w-4.5" />
-                    <span className="text-sm font-medium">Enfoque</span>
-                  </Link>
-                  <Link
-                    href="/proyectos"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 ${
-                      pathname === "/proyectos" ? "text-[#7c6fe0] font-semibold" : "text-text-secondary hover:text-white"
-                    }`}
-                  >
-                    <Kanban className="h-4.5 w-4.5" />
-                    <span className="text-sm font-medium">Proyectos</span>
-                  </Link>
-
-                  <div className="h-px bg-white/5 my-2" />
-
-                  <button
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      setDrawerOpen(true);
-                    }}
-                    className="w-full flex items-center justify-between text-text-secondary hover:text-white cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Lightbulb className="h-4.5 w-4.5" />
-                      <span className="text-sm font-medium">Ideas</span>
-                    </div>
-                    {vault.length > 0 && (
-                      <span className="px-2 py-0.5 bg-[#d4a06a]/10 border border-[#d4a06a]/20 text-[#d4a06a] rounded-full text-[10px] font-mono font-bold">
-                        {vault.length}
-                      </span>
-                    )}
-                  </button>
-                  <Link
-                    href="/historial"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 ${
-                      pathname === "/historial" ? "text-[#7c6fe0] font-semibold" : "text-text-secondary hover:text-white"
-                    }`}
-                  >
-                    <History className="h-4.5 w-4.5" />
-                    <span className="text-sm font-medium">Historial</span>
-                  </Link>
-                </nav>
-              </div>
-            </div>
-          )}
 
           {/* PAGE CONTENT */}
           <main className="flex-1 flex flex-col min-w-0 pb-16 md:pb-0">{children}</main>
