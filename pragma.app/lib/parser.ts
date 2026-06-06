@@ -254,3 +254,130 @@ export function autoTagIdea(text: string): string {
   }
   return "#dev";
 }
+
+/**
+ * Parses a line starting with "Agendar:" to extract date, time, and title
+ */
+export function parseAgendarLine(line: string): { date: string; time: string; title: string } | null {
+  const match = line.match(/^agendar:\s*(.*)/i);
+  if (!match) return null;
+
+  const content = match[1].trim();
+  const commaIndex = content.indexOf(",");
+  if (commaIndex === -1) return null;
+
+  const dateTimePart = content.substring(0, commaIndex).trim();
+  const titlePart = content.substring(commaIndex + 1).trim();
+
+  // Spanish months mapping
+  const months: Record<string, number> = {
+    enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
+    julio: 6, agosto: 7, septiembre: 8, octubre: 9, noviembre: 10, diciembre: 11
+  };
+
+  let year = new Date().getFullYear();
+  let month = new Date().getMonth();
+  let day = new Date().getDate();
+
+  // Try matching "15 de junio de 2026" or "15 de junio"
+  const dateRegex = /(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+de\s+(\d{4}))?/i;
+  const dateMatch = dateTimePart.match(dateRegex);
+
+  let dateAndHourRemainder = dateTimePart;
+
+  if (dateMatch) {
+    day = parseInt(dateMatch[1]);
+    month = months[dateMatch[2].toLowerCase()];
+    if (dateMatch[3]) {
+      year = parseInt(dateMatch[3]);
+    }
+    dateAndHourRemainder = dateTimePart.replace(dateMatch[0], "").trim();
+  } else {
+    // Try matching numerical date format like "15/06/2026" or "15-06-2026" or "15/06"
+    const numDateRegex = /(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{2,4}))?/;
+    const numDateMatch = dateTimePart.match(numDateRegex);
+    if (numDateMatch) {
+      day = parseInt(numDateMatch[1]);
+      month = parseInt(numDateMatch[2]) - 1; // 0-indexed
+      if (numDateMatch[3]) {
+        let y = parseInt(numDateMatch[3]);
+        if (y < 100) y += 2000;
+        year = y;
+      }
+      dateAndHourRemainder = dateTimePart.replace(numDateMatch[0], "").trim();
+    }
+  }
+
+  // Parse time
+  let startHour = 0;
+  let startMin = 0;
+  let endHour = 1;
+  let endMin = 0;
+
+  // Clean remainder of common prefixes
+  const timeText = dateAndHourRemainder.replace(/^(?:a las|las|a|at)\s+/i, "").trim();
+
+  // Try matching range first: e.g. "18:00 - 20:00" or "6pm - 8pm" or "18:00 a 20:00"
+  const rangeRegex = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|a|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i;
+  const rangeMatch = timeText.match(rangeRegex);
+
+  if (rangeMatch) {
+    let sh = parseInt(rangeMatch[1]);
+    let sm = rangeMatch[2] ? parseInt(rangeMatch[2]) : 0;
+    let sampm = rangeMatch[3];
+    let eh = parseInt(rangeMatch[4]);
+    let em = rangeMatch[5] ? parseInt(rangeMatch[5]) : 0;
+    let eampm = rangeMatch[6];
+
+    if (sampm) {
+      if (sampm.toLowerCase() === "pm" && sh < 12) sh += 12;
+      if (sampm.toLowerCase() === "am" && sh === 12) sh = 0;
+    }
+    if (eampm) {
+      if (eampm.toLowerCase() === "pm" && eh < 12) eh += 12;
+      if (eampm.toLowerCase() === "am" && eh === 12) eh = 0;
+    } else if (sampm) {
+      if (sampm.toLowerCase() === "pm" && eh < 12 && eh >= sh) eh += 12;
+    }
+
+    startHour = sh;
+    startMin = sm;
+    endHour = eh;
+    endMin = em;
+  } else {
+    // Single time: e.g. "18:00" or "6pm" or "6:30pm"
+    const singleRegex = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i;
+    const singleMatch = timeText.match(singleRegex);
+    if (singleMatch) {
+      let sh = parseInt(singleMatch[1]);
+      let sm = singleMatch[2] ? parseInt(singleMatch[2]) : 0;
+      let sampm = singleMatch[3];
+
+      if (sampm) {
+        if (sampm.toLowerCase() === "pm" && sh < 12) sh += 12;
+        if (sampm.toLowerCase() === "am" && sh === 12) sh = 0;
+      }
+      startHour = sh;
+      startMin = sm;
+      endHour = startHour + 1;
+      endMin = startMin;
+      if (endHour >= 24) {
+        endHour = 23;
+        endMin = 59;
+      }
+    }
+  }
+
+  const formatTimePart = (h: number, m: number) => {
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+  };
+
+  const formattedTimeRange = `${formatTimePart(startHour, startMin)} - ${formatTimePart(endHour, endMin)}`;
+  const dateKey = `${year}-${(month + 1).toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+
+  return {
+    date: dateKey,
+    time: formattedTimeRange,
+    title: titlePart,
+  };
+}

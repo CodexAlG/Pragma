@@ -52,6 +52,7 @@ export interface DayData {
   vault?: VaultItem[];
   projects?: ProjectItem[];
   history?: HistoryItem[];
+  read_notifications?: string[];
 }
 
 export interface ProfileData {

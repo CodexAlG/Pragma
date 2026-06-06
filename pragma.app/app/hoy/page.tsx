@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { pragmaDb, TimelineItem, VaultItem, DayData, HistoryItem } from "../../lib/supabase";
-import { detectFlags, parseBrainDump, calculateEffort, autoTagIdea } from "../../lib/parser";
+import { detectFlags, parseBrainDump, calculateEffort, autoTagIdea, parseAgendarLine } from "../../lib/parser";
 import { useAppLayout } from "../../components/AppLayout";
 import {
   Sparkles,
@@ -74,8 +74,15 @@ export default function HoyPage() {
   const handleOrchestrate = async () => {
     if (!rawText.trim()) return;
 
-    // Parse timeline
-    const parsedTimeline = parseBrainDump(rawText, contextAnswers);
+    const lines = rawText.split("\n");
+    // Find all "Agendar:" lines
+    const agendarLines = lines.filter(line => line.trim().toLowerCase().startsWith("agendar:"));
+    // Filter them out for today's active timeline parsing
+    const activeTimelineLines = lines.filter(line => !line.trim().toLowerCase().startsWith("agendar:"));
+    const activeTimelineText = activeTimelineLines.join("\n");
+
+    // Parse timeline from today's active text
+    const parsedTimeline = parseBrainDump(activeTimelineText, contextAnswers);
 
     // Atomic vault save if checkbox checked
     let updatedVault = [...vault];
@@ -118,6 +125,54 @@ export default function HoyPage() {
         effort_distribution: calculateEffort(dayData.current_day.timeline),
       });
     }
+
+    // Process "Agendar:" lines and sync to history
+    agendarLines.forEach(line => {
+      const parsedEvent = parseAgendarLine(line);
+      if (parsedEvent) {
+        const newEventItem: TimelineItem = {
+          id: `agendar-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          time: parsedEvent.time,
+          title: parsedEvent.title,
+          type: "meeting", // Default to meeting for general agenda items
+          status: "pending"
+        };
+
+        const existingDayIndex = updatedHistory.findIndex(h => h.date === parsedEvent.date);
+        if (existingDayIndex !== -1) {
+          const dayLog = updatedHistory[existingDayIndex];
+          const exists = dayLog.timeline.some(t => t.title.toLowerCase() === newEventItem.title.toLowerCase() && t.time === newEventItem.time);
+          if (!exists) {
+            const updatedTimeline = [...dayLog.timeline, newEventItem];
+            updatedTimeline.sort((a, b) => a.time.localeCompare(b.time));
+            updatedHistory[existingDayIndex] = {
+              ...dayLog,
+              timeline: updatedTimeline,
+              effort_distribution: calculateEffort(updatedTimeline)
+            };
+          }
+        } else {
+          const newTimeline = [newEventItem];
+          updatedHistory.push({
+            date: parsedEvent.date,
+            timeline: newTimeline,
+            effort_distribution: calculateEffort(newTimeline)
+          });
+        }
+
+        // If parsed date is today, also push to today's active timeline
+        const todayStr = new Date().toISOString().split("T")[0];
+        if (parsedEvent.date === todayStr) {
+          const existsInToday = parsedTimeline.some(t => t.title.toLowerCase() === newEventItem.title.toLowerCase() && t.time === newEventItem.time);
+          if (!existsInToday) {
+            parsedTimeline.push(newEventItem);
+          }
+        }
+      }
+    });
+
+    // Sort active timeline by time
+    parsedTimeline.sort((a, b) => a.time.localeCompare(b.time));
 
     setTimeline(parsedTimeline);
     setShowResults(true);

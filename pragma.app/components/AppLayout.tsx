@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { pragmaDb, VaultItem, DayData, PragmaUser } from "../lib/supabase";
@@ -17,7 +17,19 @@ import {
   Circle,
   Trash2,
   Plus,
+  Bell,
+  Check,
 } from "lucide-react";
+
+export interface PragmaNotification {
+  id: string;
+  eventTitle: string;
+  eventDate: string;
+  eventTime: string;
+  triggerTime: string;
+  type: "3_days_before" | "1_day_before" | "1_hour_before";
+  label: string;
+}
 
 interface AppLayoutContextType {
   user: PragmaUser | null;
@@ -28,6 +40,9 @@ interface AppLayoutContextType {
   vault: VaultItem[];
   setVault: React.Dispatch<React.SetStateAction<VaultItem[]>>;
   refreshProfile: () => Promise<void>;
+  notifications: PragmaNotification[];
+  markNotificationAsRead: (id: string) => Promise<void>;
+  markAllNotificationsAsRead: () => Promise<void>;
 }
 
 const AppLayoutContext = createContext<AppLayoutContextType | null>(null);
@@ -46,6 +61,23 @@ let cachedUser: PragmaUser | null = null;
 let cachedDayData: DayData | null = null;
 let cachedVault: VaultItem[] = [];
 
+function getEventStartDateTime(dateStr: string, timeStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  let hour = 0;
+  let min = 0;
+
+  if (timeStr) {
+    const timeMatch = timeStr.match(/\b(\d{1,2}):(\d{2})\b/);
+    if (timeMatch) {
+      hour = Number(timeMatch[1]);
+      min = Number(timeMatch[2]);
+    }
+  }
+
+  // Month is 0-indexed in JS Date, so month - 1
+  return new Date(year, month - 1, day, hour, min, 0);
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -59,6 +91,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [newIdeaText, setNewIdeaText] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
 
   const triggerToast = (msg: string) => {
     setToast(msg);
@@ -139,6 +172,147 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return success;
   };
 
+  // Notification methods
+  const getNotifications = (): PragmaNotification[] => {
+    if (!dayData) return [];
+
+    const notifications: PragmaNotification[] = [];
+    const readIds = dayData.read_notifications || [];
+    const now = new Date();
+    const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+    // Get all events from history
+    const historyEvents = (dayData.history || []).flatMap(h => 
+      (h.timeline || []).map(t => ({ ...t, date: h.date }))
+    );
+
+    // Also get today's timeline events
+    const todayStr = now.toISOString().split("T")[0];
+    const todayEvents = (dayData.current_day?.timeline || []).map(t => ({ ...t, date: todayStr }));
+
+    // Merge events and deduplicate by ID
+    const allEventsMap = new Map<string, any>();
+    historyEvents.forEach(e => allEventsMap.set(e.id, e));
+    todayEvents.forEach(e => allEventsMap.set(e.id, e));
+    const allEvents = Array.from(allEventsMap.values());
+
+    allEvents.forEach(event => {
+      if (!event.time) return;
+
+      const eventStart = getEventStartDateTime(event.date, event.time);
+      if (isNaN(eventStart.getTime())) return;
+
+      const triggers = [
+        {
+          type: "3_days_before" as const,
+          time: new Date(eventStart.getTime() - 3 * 24 * 60 * 60 * 1000),
+          label: `Faltan 3 días para: ${event.title}`
+        },
+        {
+          type: "1_day_before" as const,
+          time: new Date(eventStart.getTime() - 1 * 24 * 60 * 60 * 1000),
+          label: `Falta 1 día para: ${event.title}`
+        },
+        {
+          type: "1_hour_before" as const,
+          time: new Date(eventStart.getTime() - 1 * 60 * 60 * 1000),
+          label: `Falta 1 hora para: ${event.title}`
+        }
+      ];
+
+      triggers.forEach(trig => {
+        const id = `${event.id}-${trig.type}`;
+        if (trig.time <= now && trig.time >= fortyEightHoursAgo && !readIds.includes(id)) {
+          notifications.push({
+            id,
+            eventTitle: event.title,
+            eventDate: event.date,
+            eventTime: event.time,
+            triggerTime: trig.time.toISOString(),
+            type: trig.type,
+            label: trig.label
+          });
+        }
+      });
+    });
+
+    return notifications.sort((a, b) => b.triggerTime.localeCompare(a.triggerTime));
+  };
+
+  const markNotificationAsRead = async (id: string) => {
+    if (!dayData) return;
+    const readIds = dayData.read_notifications || [];
+    if (!readIds.includes(id)) {
+      const updatedDayData: DayData = {
+        ...dayData,
+        read_notifications: [...readIds, id]
+      };
+      await updateDayData(updatedDayData);
+    }
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    if (!dayData) return;
+    const active = getNotifications();
+    const activeIds = active.map(n => n.id);
+    const readIds = dayData.read_notifications || [];
+    const newReadIds = Array.from(new Set([...readIds, ...activeIds]));
+
+    const updatedDayData: DayData = {
+      ...dayData,
+      read_notifications: newReadIds
+    };
+    await updateDayData(updatedDayData);
+    triggerToast("Recordatorios archivados.");
+  };
+
+  const activeNotifications = getNotifications();
+
+  // Request browser permission for system notifications
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Monitor and fire browser notifications when app is active
+  const lastCheckRef = useRef<number>(Date.now());
+  const shownNotificationIds = useRef<string[]>([]);
+
+  const showSystemNotification = (title: string, body: string) => {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      new Notification(title, {
+        body,
+        icon: "/origami_p_icon.png"
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthPage || !dayData) return;
+
+    const checkNewNotifications = () => {
+      const active = getNotifications();
+      const nowMs = Date.now();
+
+      active.forEach(notif => {
+        const trigTimeMs = new Date(notif.triggerTime).getTime();
+        // If trigger time is very recent (within last 5 mins) and not shown in this session
+        if (nowMs - trigTimeMs < 5 * 60 * 1000 && !shownNotificationIds.current.includes(notif.id)) {
+          shownNotificationIds.current.push(notif.id);
+          showSystemNotification("Pragma Recordatorio", notif.label);
+          triggerToast(`Recordatorio: ${notif.label}`);
+        }
+      });
+      lastCheckRef.current = nowMs;
+    };
+
+    const interval = setInterval(checkNewNotifications, 30000);
+    checkNewNotifications();
+
+    return () => clearInterval(interval);
+  }, [dayData, isAuthPage]);
+
   // Add manual idea via drawer
   const handleAddManualIdea = async () => {
     if (!newIdeaText.trim()) return;
@@ -217,6 +391,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           vault,
           setVault,
           refreshProfile,
+          notifications: [],
+          markNotificationAsRead: async () => {},
+          markAllNotificationsAsRead: async () => {},
         }}
       >
         {children}
@@ -248,6 +425,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         vault,
         setVault,
         refreshProfile,
+        notifications: activeNotifications,
+        markNotificationAsRead,
+        markAllNotificationsAsRead,
       }}
     >
       <div className="min-h-screen flex bg-[#0a0e1a] text-text-primary overflow-x-hidden font-sans">
@@ -352,14 +532,91 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {getFormattedDate()}
             </div>
 
-            {/* Avatar discreto / LogOut */}
-            <button
-              onClick={() => pragmaDb.signOut()}
-              title="Cerrar sesión"
-              className="flex items-center justify-center h-8 w-8 rounded-full border border-white/5 hover:border-white/12 bg-[#1a2236] text-text-secondary hover:text-white transition-all duration-150 cursor-pointer"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-            </button>
+            {/* Notifications & LogOut area */}
+            <div className="flex items-center gap-3">
+              {/* Notification Bell Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
+                  title="Recordatorios"
+                  className="relative flex items-center justify-center h-8 w-8 rounded-full border border-white/5 hover:border-white/12 bg-[#1a2236] text-text-secondary hover:text-white transition-all duration-150 cursor-pointer"
+                >
+                  <Bell className="h-3.5 w-3.5" />
+                  {activeNotifications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center bg-red-500 text-white rounded-full text-[9px] font-bold font-mono">
+                      {activeNotifications.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Dropdown Menu */}
+                {notifDropdownOpen && (
+                  <>
+                    {/* Backdrop to close dropdown on click outside */}
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setNotifDropdownOpen(false)}
+                    />
+                    <div className="absolute right-0 mt-2 w-80 bg-[#111827] border border-white/5 rounded-xl shadow-2xl p-4 z-50 flex flex-col gap-3 max-h-96 overflow-y-auto">
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <span className="text-xs font-bold text-white">Recordatorios</span>
+                        {activeNotifications.length > 0 && (
+                          <button
+                            onClick={() => {
+                              markAllNotificationsAsRead();
+                              setNotifDropdownOpen(false);
+                            }}
+                            className="text-[10px] text-[#7c6fe0] hover:underline cursor-pointer font-semibold"
+                          >
+                            Archivar todos
+                          </button>
+                        )}
+                      </div>
+
+                      {activeNotifications.length === 0 ? (
+                        <div className="text-center py-6 text-text-hint text-xs">
+                          No tienes recordatorios pendientes.
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2.5">
+                          {activeNotifications.map((notif) => (
+                            <div 
+                              key={notif.id}
+                              className="bg-[#1a2236]/60 border border-white/5 rounded-lg p-2.5 flex items-start justify-between gap-3 group/notif"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-white leading-normal break-words">
+                                  {notif.label}
+                                </p>
+                                <span className="text-[9px] text-text-hint font-mono mt-1 block">
+                                  {notif.eventDate} @ {notif.eventTime.split(" - ")[0]}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => markNotificationAsRead(notif.id)}
+                                title="Archivar recordatorio"
+                                className="text-text-hint hover:text-[#2dd4a0] p-1 rounded hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Avatar discreto / LogOut */}
+              <button
+                onClick={() => pragmaDb.signOut()}
+                title="Cerrar sesión"
+                className="flex items-center justify-center h-8 w-8 rounded-full border border-white/5 hover:border-white/12 bg-[#1a2236] text-text-secondary hover:text-white transition-all duration-150 cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </header>
 
           {/* PAGE CONTENT */}
