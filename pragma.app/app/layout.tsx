@@ -20,6 +20,11 @@ export const metadata: Metadata = {
     icon: "/origami_p_icon.png",
     apple: "/origami_p_icon.png",
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Pragma",
+  },
 };
 
 export default function RootLayout({
