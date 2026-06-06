@@ -699,6 +699,7 @@ export default function HistorialPage() {
                       <option value="bug">Bug</option>
                       <option value="client">Cliente</option>
                       <option value="idea">Idea</option>
+                      <option value="Personal">Personal</option>
                     </select>
                   </div>
                 </div>
