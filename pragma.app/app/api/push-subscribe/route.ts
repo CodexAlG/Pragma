@@ -4,12 +4,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
-  return createClient(url, key);
+// Crea un cliente Supabase con el JWT del usuario como auth token
+// Esto hace que RLS se aplique correctamente con la identidad del usuario
+function getSupabaseWithUserJWT(token: string) {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    }
+  );
 }
 
 // POST /api/push-subscribe — Guarda una nueva suscripción
@@ -18,8 +30,16 @@ export async function POST(req: NextRequest) {
     const authHeader = req.headers.get('Authorization') || '';
     const token = authHeader.replace('Bearer ', '').trim();
 
-    const supabase = getSupabaseAdmin();
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (!token) {
+      return NextResponse.json({ error: 'Token requerido' }, { status: 401 });
+    }
+
+    // Verificar usuario con un cliente base
+    const supabaseBase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    );
+    const { data: { user }, error: authError } = await supabaseBase.auth.getUser(token);
 
     if (authError || !user) {
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
@@ -31,6 +51,9 @@ export async function POST(req: NextRequest) {
     if (!subscription || !subscription.endpoint) {
       return NextResponse.json({ error: 'Suscripción inválida' }, { status: 400 });
     }
+
+    // Usar cliente con JWT del usuario para que RLS lo permita
+    const supabase = getSupabaseWithUserJWT(token);
 
     const { error } = await supabase
       .from('push_subscriptions')
@@ -45,7 +68,7 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error('[push-subscribe] Error guardando suscripción:', error);
-      return NextResponse.json({ error: 'Error al guardar' }, { status: 500 });
+      return NextResponse.json({ error: 'Error al guardar', details: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });
@@ -61,8 +84,15 @@ export async function DELETE(req: NextRequest) {
     const authHeader = req.headers.get('Authorization') || '';
     const token = authHeader.replace('Bearer ', '').trim();
 
-    const supabase = getSupabaseAdmin();
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (!token) {
+      return NextResponse.json({ error: 'Token requerido' }, { status: 401 });
+    }
+
+    const supabaseBase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    );
+    const { data: { user }, error: authError } = await supabaseBase.auth.getUser(token);
 
     if (authError || !user) {
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
@@ -74,6 +104,8 @@ export async function DELETE(req: NextRequest) {
     if (!endpoint) {
       return NextResponse.json({ error: 'Endpoint requerido' }, { status: 400 });
     }
+
+    const supabase = getSupabaseWithUserJWT(token);
 
     const { error } = await supabase
       .from('push_subscriptions')
