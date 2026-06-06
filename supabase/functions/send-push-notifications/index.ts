@@ -27,44 +27,32 @@ async function vapidJWT(audience: string): Promise<string> {
   const header = b64.encode(enc.encode(JSON.stringify({ typ: "JWT", alg: "ES256" })));
   const payload = b64.encode(enc.encode(JSON.stringify({ aud: audience, exp: now + 43200, sub: VAPID_SUBJECT })));
   const data = `${header}.${payload}`;
+
+  const pubKeyBytes = b64.decode(VAPID_PUBLIC_KEY);
+  if (pubKeyBytes.length !== 65 || pubKeyBytes[0] !== 0x04) {
+    throw new Error("Invalid VAPID public key format");
+  }
+
+  const jwk = {
+    kty: "EC",
+    crv: "P-256",
+    d: VAPID_PRIVATE_KEY,
+    x: b64.encode(pubKeyBytes.slice(1, 33)),
+    y: b64.encode(pubKeyBytes.slice(33, 65)),
+    key_ops: ["sign"],
+    ext: true,
+  } as JsonWebKey;
+
   const key = await crypto.subtle.importKey(
-    "raw",
-    b64.decode(VAPID_PRIVATE_KEY),
+    "jwk",
+    jwk,
     { name: "ECDSA", namedCurve: "P-256" },
-    false,
+    true,
     ["sign"]
   );
+
   const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, enc.encode(data));
   return `${data}.${b64.encode(new Uint8Array(sig))}`;
-}
-
-function pemToDer(rawBase64url: string): ArrayBuffer {
-  const raw = b64.decode(rawBase64url);
-  if (raw.length === 32) {
-    // Correct PKCS8 wrapper for EC P-256 private key (raw 32 bytes)
-    const pkcs8Header = new Uint8Array([
-      0x30, 0x41,             // SEQUENCE (65 bytes)
-      0x02, 0x01, 0x00,       // INTEGER version = 0
-      0x30, 0x13,             // SEQUENCE AlgorithmIdentifier
-        0x06, 0x07,           // OID ecPublicKey
-          0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01,
-        0x06, 0x08,           // OID P-256
-          0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07,
-      0x04, 0x27,             // OCTET STRING (39 bytes)
-        0x30, 0x25,           // SEQUENCE ECPrivateKey
-          0x02, 0x01, 0x01,   // INTEGER version = 1
-          0x04, 0x20,         // OCTET STRING (32 bytes) — private key
-    ]);
-    const result = new Uint8Array(pkcs8Header.length + raw.length);
-    result.set(pkcs8Header);
-    result.set(raw, pkcs8Header.length);
-    return result.buffer;
-  }
-  // Already DER/PEM — strip PEM headers if present
-  const b64str = rawBase64url
-    .replace(/-----[^-]+-----/g, '')
-    .replace(/\s/g, '');
-  return b64.decode(b64str).buffer;
 }
 
 // ── AES-128-GCM Web Push Encryption (RFC 8188 / aes128gcm) ───────────────────
